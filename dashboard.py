@@ -5,19 +5,22 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
-import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
+from rich.markup import escape
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Grid, ScrollableContainer
 from textual.widget import Widget
 from textual.widgets import Footer, Header, Static
-from rich.markup import escape
+
+__version__ = "0.2.0"
+
+logger = logging.getLogger(__name__)
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -26,6 +29,8 @@ SESSIONS_DIR = CLAUDE_DIR / "sessions"
 PROJECTS_DIR = CLAUDE_DIR / "projects"
 REFRESH_INTERVAL = 0.5
 STALE_THRESHOLD_SECONDS = 5
+EXPIRE_SECONDS = 600  # 10 minutes
+OUTPUT_LINES = 10
 
 STATUS_STYLE: dict[str, tuple[str, str]] = {
     "running":     ("green",  "●"),
@@ -72,7 +77,7 @@ def _cwd_to_project_dir(cwd: str) -> str:
     return cwd.replace("/", "-")
 
 
-def _load_sessions(project_filter: Optional[Path] = None) -> list[SessionInfo]:
+def _load_sessions(project_filter: Path | None = None) -> list[SessionInfo]:
     """Load all sessions, optionally filtering to those whose cwd matches *project_filter*."""
     if not SESSIONS_DIR.exists():
         return []
@@ -95,7 +100,8 @@ def _load_sessions(project_filter: Optional[Path] = None) -> list[SessionInfo]:
                 cwd=cwd,
                 is_alive=_is_pid_alive(pid),
             ))
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to load session %s: %s", f, e)
             continue
     return sessions
 
@@ -121,8 +127,9 @@ def _infer_status(messages: list[dict], session_alive: bool, jsonl_mtime: float 
 
 def _load_messages(path: Path) -> list[dict]:
     try:
-        return [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
-    except Exception:
+        return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    except Exception as e:
+        logger.debug("Failed to load messages from %s: %s", path, e)
         return []
 
 
@@ -157,8 +164,8 @@ def _build_agent_type_lookup(session_id: str, project_dir: str) -> dict[str, str
                     st = item.get("input", {}).get("subagent_type", "")
                     if desc and st:
                         lookup[desc] = st
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Failed to build agent type lookup for session %s: %s", session_id, e)
     return lookup
 
 
@@ -196,8 +203,12 @@ def _load_agents_for_session(session: SessionInfo) -> list[AgentData]:
             meta = json.loads(meta_file.read_text())
             agent_id = meta_file.name.removeprefix("agent-").removesuffix(".meta.json")
             jsonl_path = meta_file.with_name(f"agent-{agent_id}.jsonl")
-            jsonl_mtime = jsonl_path.stat().st_mtime if jsonl_path.exists() else 0.0
-            messages = _load_messages(jsonl_path) if jsonl_mtime else []
+            try:
+                jsonl_mtime = jsonl_path.stat().st_mtime
+                messages = _load_messages(jsonl_path)
+            except FileNotFoundError:
+                jsonl_mtime = 0.0
+                messages = []
             meta_description = meta.get("description", "")
             # Prefer the subagent_type recorded in the parent session's Agent call;
             # fall back to the agentType stored in .meta.json.
@@ -218,19 +229,17 @@ def _load_agents_for_session(session: SessionInfo) -> list[AgentData]:
                 started_at=meta_file.stat().st_mtime,
                 jsonl_mtime=jsonl_mtime,
             ))
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to load agent from %s: %s", meta_file, e)
             continue
     return agents
 
 
-_EXPIRE_SECONDS = 600  # 10 minutes
-
-
-def load_all_agents(project_filter: Optional[Path] = None) -> list[AgentData]:
+def load_all_agents(project_filter: Path | None = None) -> list[AgentData]:
     """Return agents from live sessions, sorted newest-first, with stale finished agents removed.
 
     Agents whose status is completed/interrupted/unknown and whose last activity
-    (jsonl mtime, or meta mtime as fallback) is older than _EXPIRE_SECONDS are
+    (jsonl mtime, or meta mtime as fallback) is older than EXPIRE_SECONDS are
     excluded.  Running agents are never excluded.
     """
     agents: list[AgentData] = []
@@ -239,7 +248,7 @@ def load_all_agents(project_filter: Optional[Path] = None) -> list[AgentData]:
             continue
         agents.extend(_load_agents_for_session(session))
 
-    cutoff = time.time() - _EXPIRE_SECONDS
+    cutoff = time.time() - EXPIRE_SECONDS
     filtered: list[AgentData] = []
     for agent in agents:
         if agent.status == "running":
@@ -255,7 +264,7 @@ def load_all_agents(project_filter: Optional[Path] = None) -> list[AgentData]:
 
 # ─── Output rendering ─────────────────────────────────────────────────────────
 
-def _render_output(messages: list[dict], n_lines: int = 10) -> list[tuple[str, str]]:
+def _render_output(messages: list[dict]) -> list[tuple[str, str]]:
     lines: list[tuple[str, str]] = []
     for msg in messages:
         if msg.get("type") == "assistant":
@@ -275,12 +284,13 @@ def _render_output(messages: list[dict], n_lines: int = 10) -> list[tuple[str, s
                     else:
                         lines.append(("dim", f"→ {name}"))
         elif msg.get("type") == "user":
-            for c in msg.get("message", {}).get("content", []) if isinstance(
-                msg.get("message", {}).get("content"), list
-            ) else []:
+            content = msg.get("message", {}).get("content", [])
+            if not isinstance(content, list):
+                content = []
+            for c in content:
                 if isinstance(c, dict) and c.get("type") == "tool_result":
                     lines.append(("dim", "[tool result]"))
-    return lines[-n_lines:]
+    return lines[-OUTPUT_LINES:]
 
 
 # ─── Widgets ──────────────────────────────────────────────────────────────────
@@ -318,9 +328,10 @@ class AgentPane(Widget):
         self.add_class(data.status)
 
     def compose(self) -> ComposeResult:
-        color, dot = STATUS_STYLE.get(self.data.status, ("dim", "?"))
+        status_colour, sym = STATUS_STYLE.get(self.data.status, ("dim", "?"))
+        desc = escape(self.data.description[:70])
         yield Static(
-            f"[{color}]{dot}[/{color}]  [{color}]{escape(self.data.description[:70])}[/{color}]",
+            f"[{status_colour}]{sym}[/{status_colour}]  [{status_colour}]{desc}[/{status_colour}]",
             classes="pane-title",
         )
         project = Path(self.data.session.cwd).name
@@ -345,9 +356,10 @@ class AgentPane(Widget):
         self.data = data
         self.remove_class("running", "completed", "interrupted", "unknown")
         self.add_class(data.status)
-        color, dot = STATUS_STYLE.get(data.status, ("dim", "?"))
+        status_colour, sym = STATUS_STYLE.get(data.status, ("dim", "?"))
+        desc = escape(data.description[:70])
         self.query_one(".pane-title", Static).update(
-            f"[{color}]{dot}[/{color}]  [{color}]{escape(data.description[:70])}[/{color}]"
+            f"[{status_colour}]{sym}[/{status_colour}]  [{status_colour}]{desc}[/{status_colour}]"
         )
         project = Path(data.session.cwd).name
         self.query_one(".pane-meta", Static).update(
@@ -366,7 +378,7 @@ class EmptyState(Widget):
     }
     """
 
-    def __init__(self, project_filter: Optional[Path] = None) -> None:
+    def __init__(self, project_filter: Path | None = None) -> None:
         super().__init__()
         self._project_filter = project_filter
 
@@ -412,19 +424,21 @@ class Dashboard(App):
         color: $text-muted;
         dock: bottom;
     }
+
     """
     BINDINGS = [
         Binding("q", "quit", "Quit"),
         Binding("r", "refresh", "Refresh"),
     ]
 
-    def __init__(self, project_filter: Optional[Path] = None) -> None:
+    def __init__(self, project_filter: Path | None = None) -> None:
         super().__init__()
         self._project_filter = project_filter
-        if project_filter:
-            self.TITLE = f"Claude Agents — {project_filter.name}"
-        else:
-            self.TITLE = "Claude Agents Dashboard"
+        self.TITLE = (
+            f"Claude Agents — {project_filter.name}"
+            if project_filter
+            else "Claude Agents Dashboard"
+        )
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -521,7 +535,7 @@ def main() -> None:
     if args.all and args.project is not None:
         parser.error("--all and --project are mutually exclusive")
 
-    project_filter: Optional[Path] = None
+    project_filter: Path | None = None
     if args.all:
         project_filter = None
     elif args.project is not None:
@@ -530,10 +544,6 @@ def main() -> None:
             parser.error(f"--project: directory does not exist: {project_filter}")
     else:
         project_filter = Path.cwd()
-
-    if project_filter is not None and not _load_sessions(project_filter):
-        print(f"No Claude Code sessions found for: {project_filter}", file=sys.stderr)
-        sys.exit(1)
 
     Dashboard(project_filter=project_filter).run()
 
