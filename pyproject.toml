@@ -1,0 +1,20 @@
+[project]
+name = "claude-agents-dashboard"
+version = "0.1.0"
+description = "Terminal dashboard for Claude Code subagents"
+authors = [
+    {name = "einerlei",email = "31n34731@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "textual (>=8.2.5,<9.0.0) ; python_version >= \"3.11\" and python_version < \"4.0\""
+]
+
+
+[project.scripts]
+agents-dashboard = "dashboard:main"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
