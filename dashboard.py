@@ -25,6 +25,7 @@ CLAUDE_DIR = Path.home() / ".claude"
 SESSIONS_DIR = CLAUDE_DIR / "sessions"
 PROJECTS_DIR = CLAUDE_DIR / "projects"
 REFRESH_INTERVAL = 0.5
+STALE_THRESHOLD_SECONDS = 5
 
 STATUS_STYLE: dict[str, tuple[str, str]] = {
     "running":     ("green",  "●"),
@@ -51,6 +52,8 @@ class AgentData:
     session: SessionInfo
     status: str
     messages: list[dict] = field(default_factory=list)
+    started_at: float = 0.0
+    jsonl_mtime: float = 0.0
 
     @property
     def key(self) -> str:
@@ -97,18 +100,22 @@ def _load_sessions(project_filter: Optional[Path] = None) -> list[SessionInfo]:
     return sessions
 
 
-def _infer_status(messages: list[dict], session_alive: bool) -> str:
+def _infer_status(messages: list[dict], session_alive: bool, jsonl_mtime: float = 0.0) -> str:
     if not messages:
         return "unknown"
+    is_stale = time.time() - jsonl_mtime > STALE_THRESHOLD_SECONDS
     last = messages[-1]
     if last.get("type") == "assistant":
         content = last.get("message", {}).get("content", [])
-        # Agent is still waiting on a tool call
         if content and isinstance(content[-1], dict) and content[-1].get("type") == "tool_use":
-            return "running" if session_alive else "interrupted"
+            if not session_alive or is_stale:
+                return "interrupted"
+            return "running"
         return "completed"
     if last.get("type") == "user":
-        return "running" if session_alive else "interrupted"
+        if not session_alive or is_stale:
+            return "interrupted"
+        return "running"
     return "unknown"
 
 
@@ -189,7 +196,8 @@ def _load_agents_for_session(session: SessionInfo) -> list[AgentData]:
             meta = json.loads(meta_file.read_text())
             agent_id = meta_file.name.removeprefix("agent-").removesuffix(".meta.json")
             jsonl_path = meta_file.with_name(f"agent-{agent_id}.jsonl")
-            messages = _load_messages(jsonl_path) if jsonl_path.exists() else []
+            jsonl_mtime = jsonl_path.stat().st_mtime if jsonl_path.exists() else 0.0
+            messages = _load_messages(jsonl_path) if jsonl_mtime else []
             meta_description = meta.get("description", "")
             # Prefer the subagent_type recorded in the parent session's Agent call;
             # fall back to the agentType stored in .meta.json.
@@ -205,23 +213,44 @@ def _load_agents_for_session(session: SessionInfo) -> list[AgentData]:
                 description=meta_description or agent_type,
                 agent_type=agent_type,
                 session=session,
-                status=_infer_status(messages, session.is_alive),
+                status=_infer_status(messages, session.is_alive, jsonl_mtime),
                 messages=messages,
+                started_at=meta_file.stat().st_mtime,
+                jsonl_mtime=jsonl_mtime,
             ))
         except Exception:
             continue
     return agents
 
 
+_EXPIRE_SECONDS = 600  # 10 minutes
+
+
 def load_all_agents(project_filter: Optional[Path] = None) -> list[AgentData]:
-    """Return all agents from live sessions only, optionally restricted to a single project directory."""
+    """Return agents from live sessions, sorted newest-first, with stale finished agents removed.
+
+    Agents whose status is completed/interrupted/unknown and whose last activity
+    (jsonl mtime, or meta mtime as fallback) is older than _EXPIRE_SECONDS are
+    excluded.  Running agents are never excluded.
+    """
     agents: list[AgentData] = []
     for session in _load_sessions(project_filter):
         if not session.is_alive:
             continue
         agents.extend(_load_agents_for_session(session))
-    agents.sort(key=lambda a: (a.session.session_id, a.agent_id))
-    return agents
+
+    cutoff = time.time() - _EXPIRE_SECONDS
+    filtered: list[AgentData] = []
+    for agent in agents:
+        if agent.status == "running":
+            filtered.append(agent)
+            continue
+        last_activity = agent.jsonl_mtime or agent.started_at
+        if last_activity >= cutoff:
+            filtered.append(agent)
+
+    filtered.sort(key=lambda a: a.started_at, reverse=True)
+    return filtered
 
 
 # ─── Output rendering ─────────────────────────────────────────────────────────
@@ -438,10 +467,13 @@ class Dashboard(App):
             existing = set(self._pane_map)
             current = {a.key for a in agents}
 
+            # Remove panes that are no longer in the agent list (expired or gone).
             for k in existing - current:
                 self._pane_map.pop(k).remove()
 
-            for a in agents:
+            # Update or create panes, then enforce sorted order by moving each
+            # pane to the correct position within the grid.
+            for idx, a in enumerate(agents):
                 if a.key in self._pane_map:
                     self._pane_map[a.key].refresh_data(a)
                 else:
@@ -449,12 +481,16 @@ class Dashboard(App):
                     self._pane_map[a.key] = pane
                     grid.mount(pane)
 
+            # Re-order children so they match the sorted agent list (newest first).
+            for idx, a in enumerate(agents):
+                grid.move_child(self._pane_map[a.key], before=idx)
+
         n_running = sum(1 for a in agents if a.status == "running")
         n_total = len(agents)
         ts = time.strftime("%H:%M:%S")
         self.query_one("#status-bar", Static).update(
             f"[green]{n_running} running[/green]  ·  [dim]{n_total} total[/dim]  ·  "
-            f"auto-refresh {int(REFRESH_INTERVAL)}s  ·  [dim]{ts}[/dim]{self._filter_label}"
+            f"auto-refresh {REFRESH_INTERVAL:g}s  ·  [dim]{ts}[/dim]{self._filter_label}"
         )
 
     def action_refresh(self) -> None:
