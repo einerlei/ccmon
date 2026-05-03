@@ -233,3 +233,50 @@ class TestSessionInfo:
     def test_dead_session(self, tmp_path):
         s = SessionInfo(pid=99, session_id="dead", cwd=str(tmp_path), is_alive=False)
         assert s.is_alive is False
+
+
+# ─── _load_main_thread ────────────────────────────────────────────────────────
+
+class TestLoadMainThread:
+    def test_returns_none_when_jsonl_missing(self, tmp_path):
+        from dashboard import _load_main_thread
+        projects_dir = tmp_path / "projects"
+        projects_dir.mkdir()
+        session = SessionInfo(
+            pid=os.getpid(), session_id="sess-abc", cwd=str(tmp_path / "myproject"), is_alive=True
+        )
+        with patch.object(dashboard, "PROJECTS_DIR", projects_dir):
+            result = _load_main_thread(session)
+        assert result is None
+
+    def test_returns_agent_data_when_jsonl_exists(self, tmp_path):
+        from dashboard import _load_main_thread
+        projects_dir = tmp_path / "projects"
+        projects_dir.mkdir()
+        cwd = str(tmp_path / "myproject")
+        project_dir = projects_dir / _cwd_to_project_dir(cwd)
+        project_dir.mkdir(parents=True)
+        session_id = "sess-xyz"
+        msg = {"type": "assistant", "message": {"content": [{"type": "text", "text": "hello"}]}}
+        (project_dir / f"{session_id}.jsonl").write_text(json.dumps(msg) + "\n")
+        session = SessionInfo(pid=os.getpid(), session_id=session_id, cwd=cwd, is_alive=True)
+        with patch.object(dashboard, "PROJECTS_DIR", projects_dir):
+            result = _load_main_thread(session)
+        assert result is not None
+        assert result.agent_id == "__main__"
+        assert result.agent_type == "main"
+
+    def test_description_uses_cwd_basename(self, tmp_path):
+        from dashboard import _load_main_thread
+        projects_dir = tmp_path / "projects"
+        projects_dir.mkdir()
+        cwd = str(tmp_path / "my-cool-project")
+        project_dir = projects_dir / _cwd_to_project_dir(cwd)
+        project_dir.mkdir(parents=True)
+        session_id = "sess-desc"
+        (project_dir / f"{session_id}.jsonl").write_text("{}\n")
+        session = SessionInfo(pid=os.getpid(), session_id=session_id, cwd=cwd, is_alive=True)
+        with patch.object(dashboard, "PROJECTS_DIR", projects_dir):
+            result = _load_main_thread(session)
+        assert result is not None
+        assert "my-cool-project" in result.description

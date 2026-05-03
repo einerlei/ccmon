@@ -37,6 +37,7 @@ STATUS_STYLE: dict[str, tuple[str, str]] = {
     "completed":   ("dim",    "○"),
     "interrupted": ("yellow", "◐"),
     "unknown":     ("dim",    "?"),
+    "main":        ("cyan",   "◈"),
 }
 
 # ─── Data layer ───────────────────────────────────────────────────────────────
@@ -235,6 +236,28 @@ def _load_agents_for_session(session: SessionInfo) -> list[AgentData]:
     return agents
 
 
+def _load_main_thread(session: SessionInfo) -> AgentData | None:
+    """Load the main Claude Code session thread as an AgentData entry."""
+    project_dir = _cwd_to_project_dir(session.cwd)
+    jsonl_path = PROJECTS_DIR / project_dir / f"{session.session_id}.jsonl"
+    try:
+        jsonl_mtime = jsonl_path.stat().st_mtime
+        messages = _load_messages(jsonl_path)
+    except FileNotFoundError:
+        return None
+    status = _infer_status(messages, session_alive=session.is_alive, jsonl_mtime=jsonl_mtime)
+    return AgentData(
+        agent_id="__main__",
+        description=f"Main — {Path(session.cwd).name}",
+        agent_type="main",
+        session=session,
+        status=status,
+        messages=messages,
+        started_at=jsonl_mtime,
+        jsonl_mtime=jsonl_mtime,
+    )
+
+
 def load_all_agents(project_filter: Path | None = None) -> list[AgentData]:
     """Return agents from live sessions, sorted newest-first, with stale finished agents removed.
 
@@ -246,7 +269,11 @@ def load_all_agents(project_filter: Path | None = None) -> list[AgentData]:
     for session in _load_sessions(project_filter):
         if not session.is_alive:
             continue
-        agents.extend(_load_agents_for_session(session))
+        main_thread = _load_main_thread(session)
+        session_agents = _load_agents_for_session(session)
+        if main_thread is not None:
+            agents.append(main_thread)
+        agents.extend(session_agents)
 
     cutoff = time.time() - EXPIRE_SECONDS
     filtered: list[AgentData] = []
@@ -326,9 +353,15 @@ class AgentPane(Widget):
         super().__init__()
         self.data = data
         self.add_class(data.status)
+        if data.agent_type == "main":
+            self.add_class("pane--main")
 
     def compose(self) -> ComposeResult:
-        status_colour, sym = STATUS_STYLE.get(self.data.status, ("dim", "?"))
+        if self.data.agent_type == "main":
+            status_colour, _ = STATUS_STYLE.get(self.data.status, ("dim", "?"))
+            _, sym = STATUS_STYLE["main"]  # always ◈
+        else:
+            status_colour, sym = STATUS_STYLE.get(self.data.status, ("dim", "?"))
         desc = escape(self.data.description[:70])
         yield Static(
             f"[{status_colour}]{sym}[/{status_colour}]  [{status_colour}]{desc}[/{status_colour}]",
@@ -356,7 +389,13 @@ class AgentPane(Widget):
         self.data = data
         self.remove_class("running", "completed", "interrupted", "unknown")
         self.add_class(data.status)
-        status_colour, sym = STATUS_STYLE.get(data.status, ("dim", "?"))
+        if data.agent_type == "main":
+            status_colour, _ = STATUS_STYLE.get(data.status, ("dim", "?"))
+            _, sym = STATUS_STYLE["main"]  # always ◈
+            self.add_class("pane--main")
+        else:
+            status_colour, sym = STATUS_STYLE.get(data.status, ("dim", "?"))
+            self.remove_class("pane--main")
         desc = escape(data.description[:70])
         self.query_one(".pane-title", Static).update(
             f"[{status_colour}]{sym}[/{status_colour}]  [{status_colour}]{desc}[/{status_colour}]"
@@ -425,6 +464,9 @@ class Dashboard(App):
         dock: bottom;
     }
 
+    AgentPane.pane--main {
+        border: tall $primary 40%;
+    }
     """
     BINDINGS = [
         Binding("q", "quit", "Quit"),
