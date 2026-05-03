@@ -18,7 +18,7 @@ from textual.containers import Grid, ScrollableContainer
 from textual.widget import Widget
 from textual.widgets import Footer, Header, Static
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 logger = logging.getLogger(__name__)
 
@@ -33,14 +33,15 @@ EXPIRE_SECONDS = 600  # 10 minutes
 OUTPUT_LINES = 10
 
 STATUS_STYLE: dict[str, tuple[str, str]] = {
-    "running":     ("green",  "●"),
-    "completed":   ("dim",    "○"),
+    "running": ("green", "●"),
+    "completed": ("dim", "○"),
     "interrupted": ("yellow", "◐"),
-    "unknown":     ("dim",    "?"),
-    "main":        ("cyan",   "◈"),
+    "unknown": ("dim", "?"),
+    "main": ("cyan", "◈"),
 }
 
 # ─── Data layer ───────────────────────────────────────────────────────────────
+
 
 @dataclass
 class SessionInfo:
@@ -95,12 +96,14 @@ def _load_sessions(project_filter: Path | None = None) -> list[SessionInfo]:
                 # Resolve both to absolute paths for an exact match.
                 if Path(cwd).resolve() != project_filter:
                     continue
-            sessions.append(SessionInfo(
-                pid=pid,
-                session_id=session_id,
-                cwd=cwd,
-                is_alive=_is_pid_alive(pid),
-            ))
+            sessions.append(
+                SessionInfo(
+                    pid=pid,
+                    session_id=session_id,
+                    cwd=cwd,
+                    is_alive=_is_pid_alive(pid),
+                )
+            )
         except Exception as e:
             logger.debug("Failed to load session %s: %s", f, e)
             continue
@@ -220,16 +223,18 @@ def _load_agents_for_session(session: SessionInfo) -> list[AgentData]:
                 skill = _last_skill_call(messages)
                 if skill:
                     agent_type = f"manager → {skill}"
-            agents.append(AgentData(
-                agent_id=agent_id,
-                description=meta_description or agent_type,
-                agent_type=agent_type,
-                session=session,
-                status=_infer_status(messages, session.is_alive, jsonl_mtime),
-                messages=messages,
-                started_at=meta_file.stat().st_mtime,
-                jsonl_mtime=jsonl_mtime,
-            ))
+            agents.append(
+                AgentData(
+                    agent_id=agent_id,
+                    description=meta_description or agent_type,
+                    agent_type=agent_type,
+                    session=session,
+                    status=_infer_status(messages, session.is_alive, jsonl_mtime),
+                    messages=messages,
+                    started_at=meta_file.stat().st_mtime,
+                    jsonl_mtime=jsonl_mtime,
+                )
+            )
         except Exception as e:
             logger.debug("Failed to load agent from %s: %s", meta_file, e)
             continue
@@ -291,6 +296,7 @@ def load_all_agents(project_filter: Path | None = None) -> list[AgentData]:
 
 # ─── Output rendering ─────────────────────────────────────────────────────────
 
+
 def _render_output(messages: list[dict]) -> list[tuple[str, str]]:
     lines: list[tuple[str, str]] = []
     for msg in messages:
@@ -321,6 +327,7 @@ def _render_output(messages: list[dict]) -> list[tuple[str, str]]:
 
 
 # ─── Widgets ──────────────────────────────────────────────────────────────────
+
 
 class AgentPane(Widget):
     DEFAULT_CSS = """
@@ -440,6 +447,7 @@ class EmptyState(Widget):
 
 # ─── App ──────────────────────────────────────────────────────────────────────
 
+
 class Dashboard(App):
     CSS = """
     Screen { background: $background; }
@@ -492,7 +500,8 @@ class Dashboard(App):
         self._pane_map: dict[str, AgentPane] = {}
         self._filter_label = (
             f"  ·  project: [dim]{escape(str(self._project_filter))}[/dim]"
-            if self._project_filter else ""
+            if self._project_filter
+            else ""
         )
         self._do_refresh()
         self.set_interval(REFRESH_INTERVAL, self._do_refresh)
@@ -563,8 +572,7 @@ def main() -> None:
         metavar="DIR",
         default=None,
         help=(
-            "Show only agents for the given project directory "
-            "(default: current working directory)."
+            "Show only agents for the given project directory (default: current working directory)."
         ),
     )
     parser.add_argument(

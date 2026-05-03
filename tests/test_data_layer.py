@@ -20,6 +20,7 @@ from dashboard import (
 
 # ─── _is_pid_alive ────────────────────────────────────────────────────────────
 
+
 class TestIsPidAlive:
     def test_current_process_is_alive(self):
         assert _is_pid_alive(os.getpid()) is True
@@ -29,6 +30,7 @@ class TestIsPidAlive:
 
 
 # ─── _cwd_to_project_dir ──────────────────────────────────────────────────────
+
 
 class TestCwdToProjectDir:
     def test_slashes_become_dashes(self):
@@ -45,6 +47,7 @@ class TestCwdToProjectDir:
 
 
 # ─── AgentData.key ────────────────────────────────────────────────────────────
+
 
 class TestAgentDataKey:
     def _make_session(self, session_id: str, cwd: str = "/home/user/project") -> SessionInfo:
@@ -74,6 +77,7 @@ class TestAgentDataKey:
 
 
 # ─── _load_sessions ───────────────────────────────────────────────────────────
+
 
 class TestLoadSessions:
     def test_returns_empty_list_when_sessions_dir_missing(self, tmp_path):
@@ -163,15 +167,12 @@ class TestLoadSessions:
 
 # ─── _infer_status ────────────────────────────────────────────────────────────
 
+
 class TestInferStatus:
     def _tool_use_message(self, tool_name: str = "Bash") -> dict:
         return {
             "type": "assistant",
-            "message": {
-                "content": [
-                    {"type": "tool_use", "name": tool_name, "input": {}}
-                ]
-            },
+            "message": {"content": [{"type": "tool_use", "name": tool_name, "input": {}}]},
         }
 
     def _text_message(self) -> dict:
@@ -222,6 +223,7 @@ class TestInferStatus:
 
 # ─── SessionInfo ──────────────────────────────────────────────────────────────
 
+
 class TestSessionInfo:
     def test_instantiation(self, tmp_path):
         s = SessionInfo(pid=42, session_id="abc", cwd=str(tmp_path), is_alive=True)
@@ -237,9 +239,11 @@ class TestSessionInfo:
 
 # ─── _load_main_thread ────────────────────────────────────────────────────────
 
+
 class TestLoadMainThread:
     def test_returns_none_when_jsonl_missing(self, tmp_path):
         from dashboard import _load_main_thread
+
         projects_dir = tmp_path / "projects"
         projects_dir.mkdir()
         session = SessionInfo(
@@ -251,6 +255,7 @@ class TestLoadMainThread:
 
     def test_returns_agent_data_when_jsonl_exists(self, tmp_path):
         from dashboard import _load_main_thread
+
         projects_dir = tmp_path / "projects"
         projects_dir.mkdir()
         cwd = str(tmp_path / "myproject")
@@ -268,6 +273,7 @@ class TestLoadMainThread:
 
     def test_description_uses_cwd_basename(self, tmp_path):
         from dashboard import _load_main_thread
+
         projects_dir = tmp_path / "projects"
         projects_dir.mkdir()
         cwd = str(tmp_path / "my-cool-project")
