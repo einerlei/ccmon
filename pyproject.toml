@@ -15,6 +15,9 @@ dependencies = [
 [project.scripts]
 agents-dashboard = "dashboard:main"
 
+[tool.poetry]
+packages = [{include = "dashboard.py"}]
+
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"

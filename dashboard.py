@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -14,7 +16,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Grid, ScrollableContainer
 from textual.widget import Widget
-from textual.widgets import Footer, Header, Label, Static
+from textual.widgets import Footer, Header, Static
 from rich.markup import escape
 
 # ─── Constants ────────────────────────────────────────────────────────────────
@@ -22,7 +24,7 @@ from rich.markup import escape
 CLAUDE_DIR = Path.home() / ".claude"
 SESSIONS_DIR = CLAUDE_DIR / "sessions"
 PROJECTS_DIR = CLAUDE_DIR / "projects"
-REFRESH_INTERVAL = 2.0
+REFRESH_INTERVAL = 0.5
 
 STATUS_STYLE: dict[str, tuple[str, str]] = {
     "running":     ("green",  "●"),
@@ -67,7 +69,8 @@ def _cwd_to_project_dir(cwd: str) -> str:
     return cwd.replace("/", "-")
 
 
-def _load_sessions() -> list[SessionInfo]:
+def _load_sessions(project_filter: Optional[Path] = None) -> list[SessionInfo]:
+    """Load all sessions, optionally filtering to those whose cwd matches *project_filter*."""
     if not SESSIONS_DIR.exists():
         return []
     sessions = []
@@ -77,13 +80,18 @@ def _load_sessions() -> list[SessionInfo]:
             pid = data.get("pid")
             session_id = data.get("sessionId", "")
             cwd = data.get("cwd", "")
-            if pid and session_id:
-                sessions.append(SessionInfo(
-                    pid=pid,
-                    session_id=session_id,
-                    cwd=cwd,
-                    is_alive=_is_pid_alive(pid),
-                ))
+            if not (pid and session_id):
+                continue
+            if project_filter is not None:
+                # Resolve both to absolute paths for an exact match.
+                if Path(cwd).resolve() != project_filter:
+                    continue
+            sessions.append(SessionInfo(
+                pid=pid,
+                session_id=session_id,
+                cwd=cwd,
+                is_alive=_is_pid_alive(pid),
+            ))
         except Exception:
             continue
     return sessions
@@ -111,11 +119,69 @@ def _load_messages(path: Path) -> list[dict]:
         return []
 
 
+def _build_agent_type_lookup(session_id: str, project_dir: str) -> dict[str, str]:
+    """Parse the parent session JSONL and return a mapping of description -> subagent_type.
+
+    Claude Code writes the Agent tool call (with both ``description`` and
+    ``subagent_type``) into the *session* JSONL (not the subagent JSONL).  The
+    ``description`` value is also stored verbatim in every subagent's
+    ``.meta.json``, so we can use it as the join key.
+    """
+    session_jsonl = PROJECTS_DIR / project_dir / f"{session_id}.jsonl"
+    if not session_jsonl.exists():
+        return {}
+    lookup: dict[str, str] = {}
+    try:
+        for line in session_jsonl.read_text().splitlines():
+            if not line.strip():
+                continue
+            entry = json.loads(line)
+            msg = entry.get("message", {})
+            content = msg.get("content", [])
+            if not isinstance(content, list):
+                continue
+            for item in content:
+                if (
+                    isinstance(item, dict)
+                    and item.get("type") == "tool_use"
+                    and item.get("name") == "Agent"
+                ):
+                    desc = item.get("input", {}).get("description", "")
+                    st = item.get("input", {}).get("subagent_type", "")
+                    if desc and st:
+                        lookup[desc] = st
+    except Exception:
+        pass
+    return lookup
+
+
+def _last_skill_call(messages: list[dict]) -> str | None:
+    """Return the name of the most recently invoked Skill, or None."""
+    last: str | None = None
+    for msg in messages:
+        content = msg.get("message", {}).get("content", [])
+        if not isinstance(content, list):
+            continue
+        for item in content:
+            if (
+                isinstance(item, dict)
+                and item.get("type") == "tool_use"
+                and item.get("name") == "Skill"
+            ):
+                skill_name = item.get("input", {}).get("skill", "")
+                if skill_name:
+                    last = skill_name
+    return last
+
+
 def _load_agents_for_session(session: SessionInfo) -> list[AgentData]:
     project_dir = _cwd_to_project_dir(session.cwd)
     subagents_dir = PROJECTS_DIR / project_dir / session.session_id / "subagents"
     if not subagents_dir.exists():
         return []
+
+    # Build a lookup from description -> subagent_type from the parent session JSONL.
+    type_lookup = _build_agent_type_lookup(session.session_id, project_dir)
 
     agents = []
     for meta_file in subagents_dir.glob("agent-*.meta.json"):
@@ -124,10 +190,19 @@ def _load_agents_for_session(session: SessionInfo) -> list[AgentData]:
             agent_id = meta_file.name.removeprefix("agent-").removesuffix(".meta.json")
             jsonl_path = meta_file.with_name(f"agent-{agent_id}.jsonl")
             messages = _load_messages(jsonl_path) if jsonl_path.exists() else []
-            agent_type = meta.get("agentType", "unknown")
+            meta_description = meta.get("description", "")
+            # Prefer the subagent_type recorded in the parent session's Agent call;
+            # fall back to the agentType stored in .meta.json.
+            agent_type = type_lookup.get(meta_description) or meta.get("agentType", "unknown")
+            # For manager-type agents, surface the last Skill they invoked so the
+            # user can see which specialised agent they are currently running.
+            if agent_type == "manager":
+                skill = _last_skill_call(messages)
+                if skill:
+                    agent_type = f"manager → {skill}"
             agents.append(AgentData(
                 agent_id=agent_id,
-                description=meta.get("description") or agent_type,
+                description=meta_description or agent_type,
                 agent_type=agent_type,
                 session=session,
                 status=_infer_status(messages, session.is_alive),
@@ -138,11 +213,14 @@ def _load_agents_for_session(session: SessionInfo) -> list[AgentData]:
     return agents
 
 
-def load_all_agents() -> list[AgentData]:
+def load_all_agents(project_filter: Optional[Path] = None) -> list[AgentData]:
+    """Return all agents from live sessions only, optionally restricted to a single project directory."""
     agents: list[AgentData] = []
-    for session in _load_sessions():
+    for session in _load_sessions(project_filter):
+        if not session.is_alive:
+            continue
         agents.extend(_load_agents_for_session(session))
-    agents.sort(key=lambda a: (a.status != "running", a.session.session_id, a.agent_id))
+    agents.sort(key=lambda a: (a.session.session_id, a.agent_id))
     return agents
 
 
@@ -189,6 +267,8 @@ class AgentPane(Widget):
     }
     AgentPane.running     { border: solid $success; }
     AgentPane.interrupted { border: solid $warning; }
+    AgentPane.completed   { border: solid $surface-lighten-1; opacity: 0.6; }
+    AgentPane.unknown     { border: solid $surface-lighten-1; opacity: 0.6; }
 
     AgentPane .pane-title   { height: 1; text-style: bold; }
     AgentPane .pane-meta    { height: 1; color: $text-muted; }
@@ -199,6 +279,8 @@ class AgentPane(Widget):
         color: $text;
         padding-top: 1;
     }
+    AgentPane.completed .pane-title { color: $text-muted; text-style: none; }
+    AgentPane.unknown   .pane-title { color: $text-muted; text-style: none; }
     """
 
     def __init__(self, data: AgentData) -> None:
@@ -214,7 +296,7 @@ class AgentPane(Widget):
         )
         project = Path(self.data.session.cwd).name
         yield Static(
-            f"   [dim]{self.data.agent_type}[/]  ·  [dim]{project}[/]",
+            f"   [dim]{escape(self.data.agent_type[:40])}[/]  ·  [dim]{project}[/]",
             classes="pane-meta",
         )
         yield Static("   " + "─" * 60, classes="pane-divider")
@@ -238,6 +320,10 @@ class AgentPane(Widget):
         self.query_one(".pane-title", Static).update(
             f"[{color}]{dot}[/{color}]  [{color}]{escape(data.description[:70])}[/{color}]"
         )
+        project = Path(data.session.cwd).name
+        self.query_one(".pane-meta", Static).update(
+            f"   [dim]{escape(data.agent_type[:40])}[/]  ·  [dim]{project}[/]"
+        )
         self.query_one(".pane-output", Static).update(self._output_markup())
 
 
@@ -251,19 +337,30 @@ class EmptyState(Widget):
     }
     """
 
+    def __init__(self, project_filter: Optional[Path] = None) -> None:
+        super().__init__()
+        self._project_filter = project_filter
+
     def compose(self) -> ComposeResult:
-        yield Static(
-            "[dim]No subagents found.\n\n"
-            "Start a Claude Code session that spawns agents\n"
-            "via the Agent tool and they'll appear here.[/dim]",
-            markup=True,
-        )
+        if self._project_filter:
+            msg = (
+                f"[dim]No subagents for project:\n\n"
+                f"{escape(str(self._project_filter))}\n\n"
+                "Start a Claude Code session in that directory that\n"
+                "spawns agents via the Agent tool and they'll appear here.[/dim]"
+            )
+        else:
+            msg = (
+                "[dim]No subagents found.\n\n"
+                "Start a Claude Code session that spawns agents\n"
+                "via the Agent tool and they'll appear here.[/dim]"
+            )
+        yield Static(msg, markup=True)
 
 
 # ─── App ──────────────────────────────────────────────────────────────────────
 
 class Dashboard(App):
-    TITLE = "Claude Agents Dashboard"
     CSS = """
     Screen { background: $background; }
 
@@ -292,6 +389,14 @@ class Dashboard(App):
         Binding("r", "refresh", "Refresh"),
     ]
 
+    def __init__(self, project_filter: Optional[Path] = None) -> None:
+        super().__init__()
+        self._project_filter = project_filter
+        if project_filter:
+            self.TITLE = f"Claude Agents — {project_filter.name}"
+        else:
+            self.TITLE = "Claude Agents Dashboard"
+
     def compose(self) -> ComposeResult:
         yield Header()
         yield ScrollableContainer(id="scroller")
@@ -300,11 +405,15 @@ class Dashboard(App):
 
     def on_mount(self) -> None:
         self._pane_map: dict[str, AgentPane] = {}
+        self._filter_label = (
+            f"  ·  project: [dim]{escape(str(self._project_filter))}[/dim]"
+            if self._project_filter else ""
+        )
         self._do_refresh()
         self.set_interval(REFRESH_INTERVAL, self._do_refresh)
 
     def _do_refresh(self) -> None:
-        agents = load_all_agents()
+        agents = load_all_agents(self._project_filter)
         scroller = self.query_one("#scroller", ScrollableContainer)
 
         has_empty = bool(self.query("EmptyState"))
@@ -315,7 +424,7 @@ class Dashboard(App):
                 if has_grid:
                     self.query_one("#grid").remove()
                     self._pane_map.clear()
-                scroller.mount(EmptyState())
+                scroller.mount(EmptyState(self._project_filter))
         else:
             if has_empty:
                 self.query_one("EmptyState").remove()
@@ -340,11 +449,12 @@ class Dashboard(App):
                     self._pane_map[a.key] = pane
                     grid.mount(pane)
 
-        running = sum(1 for a in agents if a.status == "running")
+        n_running = sum(1 for a in agents if a.status == "running")
+        n_total = len(agents)
         ts = time.strftime("%H:%M:%S")
         self.query_one("#status-bar", Static).update(
-            f"[green]{running} running[/green]  ·  {len(agents)} total  ·  "
-            f"auto-refresh {int(REFRESH_INTERVAL)}s  ·  [dim]{ts}[/dim]"
+            f"[green]{n_running} running[/green]  ·  [dim]{n_total} total[/dim]  ·  "
+            f"auto-refresh {int(REFRESH_INTERVAL)}s  ·  [dim]{ts}[/dim]{self._filter_label}"
         )
 
     def action_refresh(self) -> None:
@@ -352,7 +462,44 @@ class Dashboard(App):
 
 
 def main() -> None:
-    Dashboard().run()
+    parser = argparse.ArgumentParser(
+        prog="agents-dashboard",
+        description="Terminal dashboard for monitoring Claude Code subagents.",
+    )
+    parser.add_argument(
+        "--project",
+        metavar="DIR",
+        default=None,
+        help=(
+            "Show only agents for the given project directory "
+            "(default: current working directory)."
+        ),
+    )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Show agents from all projects instead of filtering by directory.",
+    )
+    args = parser.parse_args()
+
+    if args.all and args.project is not None:
+        parser.error("--all and --project are mutually exclusive")
+
+    project_filter: Optional[Path] = None
+    if args.all:
+        project_filter = None
+    elif args.project is not None:
+        project_filter = Path(args.project).resolve()
+        if not project_filter.is_dir():
+            parser.error(f"--project: directory does not exist: {project_filter}")
+    else:
+        project_filter = Path.cwd()
+
+    if project_filter is not None and not _load_sessions(project_filter):
+        print(f"No Claude Code sessions found for: {project_filter}", file=sys.stderr)
+        sys.exit(1)
+
+    Dashboard(project_filter=project_filter).run()
 
 
 if __name__ == "__main__":
