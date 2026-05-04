@@ -28,8 +28,8 @@ CLAUDE_DIR = Path.home() / ".claude"
 SESSIONS_DIR = CLAUDE_DIR / "sessions"
 PROJECTS_DIR = CLAUDE_DIR / "projects"
 REFRESH_INTERVAL = 0.5
-STALE_THRESHOLD_SECONDS = 5
-EXPIRE_SECONDS = 600  # 10 minutes
+STALE_THRESHOLD_SECONDS = 2
+EXPIRE_SECONDS = 5
 OUTPUT_LINES = 10
 
 STATUS_STYLE: dict[str, tuple[str, str]] = {
@@ -329,6 +329,16 @@ def _render_output(messages: list[dict]) -> list[tuple[str, str]]:
 # ─── Widgets ──────────────────────────────────────────────────────────────────
 
 
+def _status_display(data: AgentData) -> str:
+    if data.agent_type == "main":
+        status_colour, _ = STATUS_STYLE.get(data.status, ("dim", "?"))
+        _, sym = STATUS_STYLE["main"]
+    else:
+        status_colour, sym = STATUS_STYLE.get(data.status, ("dim", "?"))
+    desc = escape(data.description[:70])
+    return f"[{status_colour}]{sym}[/{status_colour}]  [{status_colour}]{desc}[/{status_colour}]"
+
+
 class AgentPane(Widget):
     DEFAULT_CSS = """
     AgentPane {
@@ -364,16 +374,7 @@ class AgentPane(Widget):
             self.add_class("pane--main")
 
     def compose(self) -> ComposeResult:
-        if self.data.agent_type == "main":
-            status_colour, _ = STATUS_STYLE.get(self.data.status, ("dim", "?"))
-            _, sym = STATUS_STYLE["main"]  # always ◈
-        else:
-            status_colour, sym = STATUS_STYLE.get(self.data.status, ("dim", "?"))
-        desc = escape(self.data.description[:70])
-        yield Static(
-            f"[{status_colour}]{sym}[/{status_colour}]  [{status_colour}]{desc}[/{status_colour}]",
-            classes="pane-title",
-        )
+        yield Static(_status_display(self.data), classes="pane-title")
         project = Path(self.data.session.cwd).name
         yield Static(
             f"   [dim]{escape(self.data.agent_type[:40])}[/]  ·  [dim]{project}[/]",
@@ -397,16 +398,10 @@ class AgentPane(Widget):
         self.remove_class("running", "completed", "interrupted", "unknown")
         self.add_class(data.status)
         if data.agent_type == "main":
-            status_colour, _ = STATUS_STYLE.get(data.status, ("dim", "?"))
-            _, sym = STATUS_STYLE["main"]  # always ◈
             self.add_class("pane--main")
         else:
-            status_colour, sym = STATUS_STYLE.get(data.status, ("dim", "?"))
             self.remove_class("pane--main")
-        desc = escape(data.description[:70])
-        self.query_one(".pane-title", Static).update(
-            f"[{status_colour}]{sym}[/{status_colour}]  [{status_colour}]{desc}[/{status_colour}]"
-        )
+        self.query_one(".pane-title", Static).update(_status_display(data))
         project = Path(data.session.cwd).name
         self.query_one(".pane-meta", Static).update(
             f"   [dim]{escape(data.agent_type[:40])}[/]  ·  [dim]{project}[/]"

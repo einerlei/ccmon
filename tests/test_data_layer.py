@@ -10,12 +10,16 @@ from unittest.mock import patch
 
 import dashboard
 from dashboard import (
+    OUTPUT_LINES,
     AgentData,
     SessionInfo,
+    _build_agent_type_lookup,
     _cwd_to_project_dir,
     _infer_status,
     _is_pid_alive,
+    _last_skill_call,
     _load_sessions,
+    _render_output,
 )
 
 # ─── _is_pid_alive ────────────────────────────────────────────────────────────
@@ -286,3 +290,144 @@ class TestLoadMainThread:
             result = _load_main_thread(session)
         assert result is not None
         assert "my-cool-project" in result.description
+
+
+# ─── _render_output ───────────────────────────────────────────────────────────
+
+
+class TestRenderOutput:
+    def _text_msg(self, text: str) -> dict:
+        return {"type": "assistant", "message": {"content": [{"type": "text", "text": text}]}}
+
+    def _tool_msg(self, name: str, cmd: str = "") -> dict:
+        inp = {"command": cmd} if name == "Bash" else {}
+        return {
+            "type": "assistant",
+            "message": {"content": [{"type": "tool_use", "name": name, "input": inp}]},
+        }
+
+    def _user_result_msg(self) -> dict:
+        return {"type": "user", "message": {"content": [{"type": "tool_result"}]}}
+
+    def test_empty_messages_returns_empty_list(self):
+        assert _render_output([]) == []
+
+    def test_assistant_text_message(self):
+        assert _render_output([self._text_msg("hello")]) == [("", "hello")]
+
+    def test_blank_lines_in_text_skipped(self):
+        result = _render_output([self._text_msg("line1\n\nline2")])
+        assert result == [("", "line1"), ("", "line2")]
+
+    def test_text_truncated_to_140_chars(self):
+        result = _render_output([self._text_msg("x" * 200)])
+        assert result == [("", "x" * 140)]
+
+    def test_bash_tool_use(self):
+        assert _render_output([self._tool_msg("Bash", "echo hello")]) == [("dim", "$ echo hello")]
+
+    def test_non_bash_tool_use(self):
+        assert _render_output([self._tool_msg("Read")]) == [("dim", "→ Read")]
+
+    def test_user_tool_result(self):
+        assert _render_output([self._user_result_msg()]) == [("dim", "[tool result]")]
+
+    def test_returns_last_output_lines_only(self):
+        msgs = [self._text_msg(f"line {i}") for i in range(OUTPUT_LINES + 5)]
+        result = _render_output(msgs)
+        assert len(result) == OUTPUT_LINES
+        assert result[-1] == ("", f"line {OUTPUT_LINES + 4}")
+
+
+# ─── _build_agent_type_lookup ─────────────────────────────────────────────────
+
+
+class TestBuildAgentTypeLookup:
+    def _agent_line(self, description: str, subagent_type: str) -> str:
+        import json
+
+        entry = {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "name": "Agent",
+                        "input": {"description": description, "subagent_type": subagent_type},
+                    }
+                ]
+            },
+        }
+        return json.dumps(entry)
+
+    def test_missing_jsonl_returns_empty_dict(self, tmp_path):
+        projects_dir = tmp_path / "projects"
+        projects_dir.mkdir()
+        with patch.object(dashboard, "PROJECTS_DIR", projects_dir):
+            result = _build_agent_type_lookup("sess-x", "-home-user-proj")
+        assert result == {}
+
+    def test_valid_agent_tool_call_captured(self, tmp_path):
+        projects_dir = tmp_path / "projects"
+        project_dir = projects_dir / "-home-user-proj"
+        project_dir.mkdir(parents=True)
+        (project_dir / "sess-x.jsonl").write_text(
+            self._agent_line("my task", "general-purpose") + "\n"
+        )
+        with patch.object(dashboard, "PROJECTS_DIR", projects_dir):
+            result = _build_agent_type_lookup("sess-x", "-home-user-proj")
+        assert result == {"my task": "general-purpose"}
+
+    def test_invalid_json_line_skipped(self, tmp_path):
+        projects_dir = tmp_path / "projects"
+        project_dir = projects_dir / "-home-user-proj"
+        project_dir.mkdir(parents=True)
+        (project_dir / "sess-x.jsonl").write_text("not valid json{{{\n")
+        with patch.object(dashboard, "PROJECTS_DIR", projects_dir):
+            result = _build_agent_type_lookup("sess-x", "-home-user-proj")
+        assert result == {}
+
+    def test_multiple_agent_calls_all_captured(self, tmp_path):
+        projects_dir = tmp_path / "projects"
+        project_dir = projects_dir / "-home-user-proj"
+        project_dir.mkdir(parents=True)
+        lines = (
+            "\n".join(
+                [
+                    self._agent_line("task one", "general-purpose"),
+                    self._agent_line("task two", "code-reviewer"),
+                ]
+            )
+            + "\n"
+        )
+        (project_dir / "sess-x.jsonl").write_text(lines)
+        with patch.object(dashboard, "PROJECTS_DIR", projects_dir):
+            result = _build_agent_type_lookup("sess-x", "-home-user-proj")
+        assert result == {"task one": "general-purpose", "task two": "code-reviewer"}
+
+
+# ─── _last_skill_call ─────────────────────────────────────────────────────────
+
+
+class TestLastSkillCall:
+    def _skill_msg(self, skill_name: str) -> dict:
+        return {
+            "type": "assistant",
+            "message": {
+                "content": [{"type": "tool_use", "name": "Skill", "input": {"skill": skill_name}}]
+            },
+        }
+
+    def test_empty_messages_returns_none(self):
+        assert _last_skill_call([]) is None
+
+    def test_no_skill_calls_returns_none(self):
+        msg = {"type": "assistant", "message": {"content": [{"type": "text", "text": "hi"}]}}
+        assert _last_skill_call([msg]) is None
+
+    def test_single_skill_call_returns_name(self):
+        assert _last_skill_call([self._skill_msg("my-skill")]) == "my-skill"
+
+    def test_multiple_skill_calls_returns_last(self):
+        msgs = [self._skill_msg("first"), self._skill_msg("second")]
+        assert _last_skill_call(msgs) == "second"

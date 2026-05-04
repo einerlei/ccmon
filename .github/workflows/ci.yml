@@ -30,6 +30,8 @@ jobs:
         run: poetry run ruff check --output-format github
       - name: Ruff format check
         run: poetry run ruff format --check
+      - name: Type check (pyright)
+        run: poetry run pyright
 
   test:
     name: Test (Python ${{ matrix.python-version }})
@@ -54,4 +56,4 @@ jobs:
       - name: Install dependencies
         run: poetry install --with dev
       - name: Run tests
-        run: poetry run pytest -q --tb=short --no-header
+        run: poetry run pytest -q --tb=short --no-header --cov=dashboard --cov-fail-under=70
