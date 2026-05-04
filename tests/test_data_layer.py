@@ -1,5 +1,5 @@
 # ruff: noqa: S101
-"""Unit tests for the data layer in dashboard.py."""
+"""Unit tests for the data layer in cctop.py."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ import os
 import time
 from unittest.mock import patch
 
-import dashboard
-from dashboard import (
+import cctop
+from cctop import (
     OUTPUT_LINES,
     AgentData,
     SessionInfo,
@@ -87,14 +87,14 @@ class TestLoadSessions:
     def test_returns_empty_list_when_sessions_dir_missing(self, tmp_path):
         fake_sessions_dir = tmp_path / "nonexistent_sessions"
         # fake_sessions_dir intentionally NOT created
-        with patch.object(dashboard, "SESSIONS_DIR", fake_sessions_dir):
+        with patch.object(cctop, "SESSIONS_DIR", fake_sessions_dir):
             result = _load_sessions()
         assert result == []
 
     def test_returns_empty_list_when_dir_exists_but_empty(self, tmp_path):
         sessions_dir = tmp_path / "sessions"
         sessions_dir.mkdir()
-        with patch.object(dashboard, "SESSIONS_DIR", sessions_dir):
+        with patch.object(cctop, "SESSIONS_DIR", sessions_dir):
             result = _load_sessions()
         assert result == []
 
@@ -109,7 +109,7 @@ class TestLoadSessions:
             "cwd": str(project_dir),
         }
         (sessions_dir / "test-session-id.json").write_text(json.dumps(session_data))
-        with patch.object(dashboard, "SESSIONS_DIR", sessions_dir):
+        with patch.object(cctop, "SESSIONS_DIR", sessions_dir):
             result = _load_sessions()
         assert len(result) == 1
         assert result[0].session_id == "test-session-id"
@@ -119,7 +119,7 @@ class TestLoadSessions:
         sessions_dir = tmp_path / "sessions"
         sessions_dir.mkdir()
         (sessions_dir / "bad.json").write_text("not valid json{{{")
-        with patch.object(dashboard, "SESSIONS_DIR", sessions_dir):
+        with patch.object(cctop, "SESSIONS_DIR", sessions_dir):
             result = _load_sessions()
         assert result == []
 
@@ -131,7 +131,7 @@ class TestLoadSessions:
         (sessions_dir / "a.json").write_text(json.dumps({"pid": 1, "cwd": fake_cwd}))
         # missing pid
         (sessions_dir / "b.json").write_text(json.dumps({"sessionId": "x", "cwd": fake_cwd}))
-        with patch.object(dashboard, "SESSIONS_DIR", sessions_dir):
+        with patch.object(cctop, "SESSIONS_DIR", sessions_dir):
             result = _load_sessions()
         assert result == []
 
@@ -148,7 +148,7 @@ class TestLoadSessions:
         (sessions_dir / "sess-a.json").write_text(json.dumps(session_data))
         different_project = tmp_path / "project_b"
         different_project.mkdir()
-        with patch.object(dashboard, "SESSIONS_DIR", sessions_dir):
+        with patch.object(cctop, "SESSIONS_DIR", sessions_dir):
             result = _load_sessions(project_filter=different_project)
         assert result == []
 
@@ -163,7 +163,7 @@ class TestLoadSessions:
             "cwd": str(project_a),
         }
         (sessions_dir / "sess-a.json").write_text(json.dumps(session_data))
-        with patch.object(dashboard, "SESSIONS_DIR", sessions_dir):
+        with patch.object(cctop, "SESSIONS_DIR", sessions_dir):
             result = _load_sessions(project_filter=project_a.resolve())
         assert len(result) == 1
         assert result[0].session_id == "sess-a"
@@ -246,19 +246,19 @@ class TestSessionInfo:
 
 class TestLoadMainThread:
     def test_returns_none_when_jsonl_missing(self, tmp_path):
-        from dashboard import _load_main_thread
+        from cctop import _load_main_thread
 
         projects_dir = tmp_path / "projects"
         projects_dir.mkdir()
         session = SessionInfo(
             pid=os.getpid(), session_id="sess-abc", cwd=str(tmp_path / "myproject"), is_alive=True
         )
-        with patch.object(dashboard, "PROJECTS_DIR", projects_dir):
+        with patch.object(cctop, "PROJECTS_DIR", projects_dir):
             result = _load_main_thread(session)
         assert result is None
 
     def test_returns_agent_data_when_jsonl_exists(self, tmp_path):
-        from dashboard import _load_main_thread
+        from cctop import _load_main_thread
 
         projects_dir = tmp_path / "projects"
         projects_dir.mkdir()
@@ -269,14 +269,14 @@ class TestLoadMainThread:
         msg = {"type": "assistant", "message": {"content": [{"type": "text", "text": "hello"}]}}
         (project_dir / f"{session_id}.jsonl").write_text(json.dumps(msg) + "\n")
         session = SessionInfo(pid=os.getpid(), session_id=session_id, cwd=cwd, is_alive=True)
-        with patch.object(dashboard, "PROJECTS_DIR", projects_dir):
+        with patch.object(cctop, "PROJECTS_DIR", projects_dir):
             result = _load_main_thread(session)
         assert result is not None
         assert result.agent_id == "__main__"
         assert result.agent_type == "main"
 
     def test_description_uses_cwd_basename(self, tmp_path):
-        from dashboard import _load_main_thread
+        from cctop import _load_main_thread
 
         projects_dir = tmp_path / "projects"
         projects_dir.mkdir()
@@ -286,7 +286,7 @@ class TestLoadMainThread:
         session_id = "sess-desc"
         (project_dir / f"{session_id}.jsonl").write_text("{}\n")
         session = SessionInfo(pid=os.getpid(), session_id=session_id, cwd=cwd, is_alive=True)
-        with patch.object(dashboard, "PROJECTS_DIR", projects_dir):
+        with patch.object(cctop, "PROJECTS_DIR", projects_dir):
             result = _load_main_thread(session)
         assert result is not None
         assert "my-cool-project" in result.description
@@ -363,7 +363,7 @@ class TestBuildAgentTypeLookup:
     def test_missing_jsonl_returns_empty_dict(self, tmp_path):
         projects_dir = tmp_path / "projects"
         projects_dir.mkdir()
-        with patch.object(dashboard, "PROJECTS_DIR", projects_dir):
+        with patch.object(cctop, "PROJECTS_DIR", projects_dir):
             result = _build_agent_type_lookup("sess-x", "-home-user-proj")
         assert result == {}
 
@@ -374,7 +374,7 @@ class TestBuildAgentTypeLookup:
         (project_dir / "sess-x.jsonl").write_text(
             self._agent_line("my task", "general-purpose") + "\n"
         )
-        with patch.object(dashboard, "PROJECTS_DIR", projects_dir):
+        with patch.object(cctop, "PROJECTS_DIR", projects_dir):
             result = _build_agent_type_lookup("sess-x", "-home-user-proj")
         assert result == {"my task": "general-purpose"}
 
@@ -383,7 +383,7 @@ class TestBuildAgentTypeLookup:
         project_dir = projects_dir / "-home-user-proj"
         project_dir.mkdir(parents=True)
         (project_dir / "sess-x.jsonl").write_text("not valid json{{{\n")
-        with patch.object(dashboard, "PROJECTS_DIR", projects_dir):
+        with patch.object(cctop, "PROJECTS_DIR", projects_dir):
             result = _build_agent_type_lookup("sess-x", "-home-user-proj")
         assert result == {}
 
@@ -401,7 +401,7 @@ class TestBuildAgentTypeLookup:
             + "\n"
         )
         (project_dir / "sess-x.jsonl").write_text(lines)
-        with patch.object(dashboard, "PROJECTS_DIR", projects_dir):
+        with patch.object(cctop, "PROJECTS_DIR", projects_dir):
             result = _build_agent_type_lookup("sess-x", "-home-user-proj")
         assert result == {"task one": "general-purpose", "task two": "code-reviewer"}
 

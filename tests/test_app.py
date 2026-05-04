@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from dashboard import Dashboard
+from cctop import Dashboard
 
 
 class TestDashboardStartup:

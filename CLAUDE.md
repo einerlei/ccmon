@@ -9,7 +9,7 @@ bump task in the plan. Use semantic versioning:
 - New feature or behaviour change → minor bump (0.x.0)
 - Bug fix or internal refactor only → patch bump (0.x.x)
 
-Update both `pyproject.toml` (`version =`) and `dashboard.py` (`__version__ =`), and add a
+Update both `pyproject.toml` (`version =`) and `cctop.py` (`__version__ =`), and add a
 `## [X.Y.Z] - YYYY-MM-DD` entry to `CHANGELOG.md` following the Keep a Changelog format.
 
 ## Smoke-test after changes

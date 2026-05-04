@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Releasing a new version
 
 1. Update `version` in `pyproject.toml`
-2. Update `__version__` in `dashboard.py`
+2. Update `__version__` in `cctop.py`
 3. Add release notes under a new `## [X.Y.Z] - YYYY-MM-DD` section below
 4. Commit: `git commit -m "chore: release vX.Y.Z"`
 5. Tag: `git tag vX.Y.Z`
@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 
 ## [Unreleased]
+
+## [0.3.2] - 2026-05-04
+
+### Changed
+- Renamed main module from `dashboard.py` to `cctop.py` to align with CLI and project name
 
 ## [0.3.1] - 2026-05-04
 
@@ -53,7 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Test suite with pytest (unit tests for data layer and CLI)
 - GitHub Actions CI workflow (lint + test on push/PR to main)
-- `__version__` constant in `dashboard.py`
+- `__version__` constant in `cctop.py`
 - Expanded README with architecture overview, dev setup, and contributing guide
 
 ### Changed
