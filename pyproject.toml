@@ -3,7 +3,7 @@ name = "cctop"
 version = "0.3.5"
 description = "Terminal monitor for Claude Code sessions and subagents"
 authors = [
-    {name = "einerlei",email = "31n34731@gmail.com"}
+    {name = "einerlei", email = "31n34731@gmail.com"}
 ]
 readme = "README.md"
 requires-python = ">=3.11"
