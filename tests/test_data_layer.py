@@ -431,3 +431,219 @@ class TestLastSkillCall:
     def test_multiple_skill_calls_returns_last(self):
         msgs = [self._skill_msg("first"), self._skill_msg("second")]
         assert _last_skill_call(msgs) == "second"
+
+    def test_string_content_is_skipped(self):
+        """Message whose content is a plain string (not a list) hits the continue branch."""
+        msg = {"type": "assistant", "message": {"content": "plain string, not a list"}}
+        assert _last_skill_call([msg]) is None
+
+
+# ─── _load_messages ───────────────────────────────────────────────────────────
+
+
+class TestLoadMessages:
+    def test_invalid_jsonl_returns_empty_list(self, tmp_path):
+        from cctop import _load_messages
+
+        bad_file = tmp_path / "bad.jsonl"
+        bad_file.write_text("not json{")
+        result = _load_messages(bad_file)
+        assert result == []
+
+    def test_valid_jsonl_returns_parsed_lines(self, tmp_path):
+        from cctop import _load_messages
+
+        good_file = tmp_path / "good.jsonl"
+        msg = {"type": "assistant", "message": {"content": []}}
+        good_file.write_text(json.dumps(msg) + "\n")
+        result = _load_messages(good_file)
+        assert result == [msg]
+
+    def test_blank_lines_are_skipped(self, tmp_path):
+        from cctop import _load_messages
+
+        f = tmp_path / "msgs.jsonl"
+        msg = {"type": "user"}
+        f.write_text("\n" + json.dumps(msg) + "\n\n")
+        result = _load_messages(f)
+        assert result == [msg]
+
+
+# ─── _build_agent_type_lookup (non-list content) ──────────────────────────────
+
+
+class TestBuildAgentTypeLookupEdgeCases:
+    def test_string_content_is_skipped(self, tmp_path):
+        """Lines where message.content is a plain string hit the `continue` branch."""
+        projects_dir = tmp_path / "projects"
+        project_dir = projects_dir / "-home-user-proj"
+        project_dir.mkdir(parents=True)
+        entry = {"type": "assistant", "message": {"content": "plain string"}}
+        (project_dir / "sess-x.jsonl").write_text(json.dumps(entry) + "\n")
+        with patch.object(cctop, "PROJECTS_DIR", projects_dir):
+            result = _build_agent_type_lookup("sess-x", "-home-user-proj")
+        assert result == {}
+
+
+# ─── _load_agents_for_session ─────────────────────────────────────────────────
+
+
+class TestLoadAgentsForSession:
+    def _make_session(
+        self, cwd: str, session_id: str = "sess-abc", pid: int | None = None
+    ) -> SessionInfo:
+        return SessionInfo(
+            pid=pid if pid is not None else os.getpid(),
+            session_id=session_id,
+            cwd=cwd,
+            is_alive=True,
+        )
+
+    def _write_meta(
+        self,
+        subagents_dir,
+        agent_id: str,
+        description: str = "task",
+        agent_type: str = "general-purpose",
+    ) -> None:
+        meta = {"description": description, "agentType": agent_type}
+        (subagents_dir / f"agent-{agent_id}.meta.json").write_text(json.dumps(meta))
+
+    def test_missing_jsonl_loads_agent_with_empty_messages(self, tmp_path):
+        """An agent with a .meta.json but no .jsonl still loads with empty messages."""
+        from cctop import _load_agents_for_session
+
+        cwd = str(tmp_path / "myproject")
+        session = self._make_session(cwd)
+        project_dir_name = _cwd_to_project_dir(cwd)
+        subagents_dir = tmp_path / "projects" / project_dir_name / session.session_id / "subagents"
+        subagents_dir.mkdir(parents=True)
+        self._write_meta(subagents_dir, "001", description="my task")
+
+        with patch.object(cctop, "PROJECTS_DIR", tmp_path / "projects"):
+            agents = _load_agents_for_session(session)
+
+        assert len(agents) == 1
+        assert agents[0].messages == []
+        assert agents[0].agent_id == "001"
+
+    def test_manager_agent_with_skill_call_shows_skill_name(self, tmp_path):
+        """Agent with agent_type 'manager' and a Skill tool call shows 'manager → <skill>'."""
+        from cctop import _load_agents_for_session
+
+        cwd = str(tmp_path / "myproject")
+        session = self._make_session(cwd)
+        project_dir_name = _cwd_to_project_dir(cwd)
+        projects_dir = tmp_path / "projects"
+        subagents_dir = projects_dir / project_dir_name / session.session_id / "subagents"
+        subagents_dir.mkdir(parents=True)
+
+        agent_id = "mgr-001"
+        # Write .meta.json with agentType=manager
+        meta = {"description": "manager task", "agentType": "manager"}
+        (subagents_dir / f"agent-{agent_id}.meta.json").write_text(json.dumps(meta))
+
+        # Write .jsonl with a Skill tool-use call
+        skill_msg = {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {"type": "tool_use", "name": "Skill", "input": {"skill": "code-review"}}
+                ]
+            },
+        }
+        (subagents_dir / f"agent-{agent_id}.jsonl").write_text(json.dumps(skill_msg) + "\n")
+
+        with patch.object(cctop, "PROJECTS_DIR", projects_dir):
+            agents = _load_agents_for_session(session)
+
+        assert len(agents) == 1
+        assert agents[0].agent_type == "manager → code-review"
+
+    def test_bad_meta_json_is_skipped(self, tmp_path):
+        """A .meta.json with invalid JSON is caught and that agent is not returned."""
+        from cctop import _load_agents_for_session
+
+        cwd = str(tmp_path / "myproject")
+        session = self._make_session(cwd)
+        project_dir_name = _cwd_to_project_dir(cwd)
+        subagents_dir = tmp_path / "projects" / project_dir_name / session.session_id / "subagents"
+        subagents_dir.mkdir(parents=True)
+        (subagents_dir / "agent-bad.meta.json").write_text("INVALID JSON{")
+
+        with patch.object(cctop, "PROJECTS_DIR", tmp_path / "projects"):
+            agents = _load_agents_for_session(session)
+
+        assert agents == []
+
+
+# ─── load_all_agents ──────────────────────────────────────────────────────────
+
+
+class TestLoadAllAgents:
+    def _write_session(self, sessions_dir, session_id: str, cwd: str, pid: int) -> None:
+        data = {"pid": pid, "sessionId": session_id, "cwd": cwd}
+        (sessions_dir / f"{session_id}.json").write_text(json.dumps(data))
+
+    def test_dead_session_is_skipped(self, tmp_path):
+        """A session whose pid is not alive is excluded entirely by load_all_agents."""
+        from cctop import load_all_agents
+
+        sessions_dir = tmp_path / "sessions"
+        sessions_dir.mkdir()
+        projects_dir = tmp_path / "projects"
+        projects_dir.mkdir()
+        cwd = str(tmp_path / "myproject")
+        self._write_session(sessions_dir, "sess-dead", cwd, pid=999999)
+
+        with patch.object(cctop, "SESSIONS_DIR", sessions_dir), \
+             patch.object(cctop, "PROJECTS_DIR", projects_dir):
+            agents = load_all_agents()
+
+        assert agents == []
+
+    def test_stale_non_running_agent_with_recent_mtime_is_included(self, tmp_path):
+        """Non-running agent with recent mtime is included (within EXPIRE_SECONDS)."""
+        from cctop import load_all_agents
+
+        sessions_dir = tmp_path / "sessions"
+        sessions_dir.mkdir()
+        projects_dir = tmp_path / "projects"
+        cwd = str(tmp_path / "myproject")
+        session_id = "sess-stale"
+        self._write_session(sessions_dir, session_id, cwd, pid=os.getpid())
+
+        # Set up main thread JSONL with a completed (text) message
+        project_dir_name = _cwd_to_project_dir(cwd)
+        project_dir = projects_dir / project_dir_name
+        project_dir.mkdir(parents=True)
+        msg = {"type": "assistant", "message": {"content": [{"type": "text", "text": "done"}]}}
+        jsonl_path = project_dir / f"{session_id}.jsonl"
+        jsonl_path.write_text(json.dumps(msg) + "\n")
+
+        with patch.object(cctop, "SESSIONS_DIR", sessions_dir), \
+             patch.object(cctop, "PROJECTS_DIR", projects_dir):
+            agents = load_all_agents()
+
+        # The main thread agent should appear because mtime is very recent (just written)
+        assert any(a.agent_id == "__main__" for a in agents)
+
+
+# ─── _render_output (non-dict content items) ─────────────────────────────────
+
+
+class TestRenderOutputEdgeCases:
+    def test_non_dict_content_item_is_skipped(self):
+        """An assistant message whose content list contains a plain string is skipped gracefully."""
+        msg = {
+            "type": "assistant",
+            "message": {"content": ["plain string item", {"type": "text", "text": "hello"}]},
+        }
+        result = _render_output([msg])
+        assert result == [("", "hello")]
+
+    def test_user_message_with_string_content_is_handled(self):
+        """A user message where content is a plain string (not list) produces no lines."""
+        msg = {"type": "user", "message": {"content": "not a list"}}
+        result = _render_output([msg])
+        assert result == []
