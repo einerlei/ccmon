@@ -2,8 +2,8 @@
 
 ## Version bumps
 
-Every `/delegate` workflow that produces user-facing or tooling changes **must** include a version
-bump task in the plan. Use semantic versioning:
+Every workflow that produces user-facing or tooling changes **must** include a version
+bump. Use semantic versioning:
 
 - Breaking change (renamed CLI, removed feature) → minor bump (0.x.0)
 - New feature or behaviour change → minor bump (0.x.0)

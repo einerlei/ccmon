@@ -1,6 +1,6 @@
 [project]
 name = "cctop"
-version = "0.3.4"
+version = "0.3.5"
 description = "Terminal monitor for Claude Code sessions and subagents"
 authors = [
     {name = "einerlei",email = "31n34731@gmail.com"}

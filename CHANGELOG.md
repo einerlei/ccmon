@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-05-04
+
+### Changed
+- `make install` now uses `pip install .`; `make install-pipx` added for pipx-based installs
+- Removed `/delegate` skill reference from `CLAUDE.md` (it is a custom skill, not a Claude built-in)
+
 ## [0.3.4] - 2026-05-04
 
 ### Fixed
