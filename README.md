@@ -1,6 +1,6 @@
-# Claude Agents Dashboard
+# cctop
 
-Terminal TUI for monitoring Claude Code subagents in real time.
+Terminal monitor for Claude Code sessions and subagents in real time. Run `cctop` to watch your agents.
 
 ## Features
 
@@ -18,23 +18,39 @@ Terminal TUI for monitoring Claude Code subagents in real time.
 
 ## Install
 
+### Global install (recommended)
+
+Requires [pipx](https://pipx.pypa.io) (`brew install pipx` on macOS):
+
 ```bash
-git clone https://github.com/yourusername/claude-agents-dashboard.git
-cd claude-agents-dashboard
+pipx install .
+# or
+make install
+```
+
+After install, `cctop` is available globally:
+
+```bash
+cctop
+cctop --project /path/to/project
+cctop --all
+```
+
+### Development setup
+
+```bash
+git clone https://github.com/einerlei/cctop.git
+cd cctop
 poetry install
+poetry run cctop
 ```
 
 ## Usage
 
 ```bash
-# Show agents for the current directory (default)
-poetry run agents-dashboard
-
-# Show agents for a specific project
-poetry run agents-dashboard --project /path/to/project
-
-# Show agents from all projects
-poetry run agents-dashboard --all
+cctop
+cctop --project /path/to/project
+cctop --all
 ```
 
 ## Key bindings
@@ -46,7 +62,7 @@ poetry run agents-dashboard --all
 
 ## Architecture
 
-The dashboard is a single-file Python application using the Textual TUI framework.
+The monitor is a single-file Python application using the Textual TUI framework.
 
 **Data sources:**
 - Sessions: `~/.claude/sessions/*.json` — contains PID, working directory, and session ID
@@ -73,8 +89,8 @@ poetry run pytest -q
 poetry run ruff check
 poetry run ruff format --check
 
-# Run the dashboard
-poetry run agents-dashboard
+# Run the monitor
+cctop
 ```
 
 ## Contributing

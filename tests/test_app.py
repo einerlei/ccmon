@@ -20,7 +20,7 @@ class TestDashboardStartup:
     async def test_app_title_default(self):
         async with Dashboard().run_test(headless=True) as pilot:
             title = pilot.app.TITLE or ""
-            assert "Claude Agents" in title
+            assert "Claude Code Monitor" in title
 
     async def test_app_title_with_project(self, tmp_path: Path):
         async with Dashboard(project_filter=tmp_path).run_test(headless=True) as pilot:

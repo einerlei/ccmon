@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Claude Agents Dashboard — monitor running Claude Code subagents."""
+"""cctop — monitor running Claude Code sessions and subagents."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from textual.containers import Grid, ScrollableContainer
 from textual.widget import Widget
 from textual.widgets import Footer, Header, Static
 
-__version__ = "0.2.1"
+__version__ = "0.3.0"
 
 logger = logging.getLogger(__name__)
 
@@ -426,16 +426,15 @@ class EmptyState(Widget):
     def compose(self) -> ComposeResult:
         if self._project_filter:
             msg = (
-                f"[dim]No subagents for project:\n\n"
+                f"[dim]No active Claude Code session in:\n\n"
                 f"{escape(str(self._project_filter))}\n\n"
-                "Start a Claude Code session in that directory that\n"
-                "spawns agents via the Agent tool and they'll appear here.[/dim]"
+                "Start a Claude Code session in that directory\n"
+                "and it will appear here.[/dim]"
             )
         else:
             msg = (
-                "[dim]No subagents found.\n\n"
-                "Start a Claude Code session that spawns agents\n"
-                "via the Agent tool and they'll appear here.[/dim]"
+                "[dim]No active Claude Code sessions.\n\n"
+                "Start a Claude Code session and it will appear here.[/dim]"
             )
         yield Static(msg, markup=True)
 
@@ -480,9 +479,9 @@ class Dashboard(App):
         super().__init__()
         self._project_filter = project_filter
         self.TITLE = (
-            f"Claude Agents — {project_filter.name}"
+            f"Claude Code Monitor — {project_filter.name}"
             if project_filter
-            else "Claude Agents Dashboard"
+            else "Claude Code Monitor"
         )
 
     def compose(self) -> ComposeResult:
@@ -559,7 +558,7 @@ class Dashboard(App):
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        prog="agents-dashboard",
+        prog="cctop",
         description="Terminal dashboard for monitoring Claude Code subagents.",
     )
     parser.add_argument(

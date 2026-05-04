@@ -18,6 +18,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-04
+
+### Changed
+- **Renamed** project to `cctop`; CLI entrypoint is now `cctop`
+- Empty state message updated: "No active Claude Code session" (was "No subagents for project")
+- App title updated to "Claude Code Monitor"
+
+### Added
+- `Makefile` with `lint`, `format`, `check`, and `test` targets for developer convenience
+- `pytest-cov` with 70% coverage floor enforced in CI
+- `pyright` type-checking step in CI lint job
+- `.pre-commit-config.yaml` with ruff and pyright hooks
+- 16 new unit tests covering `_render_output`, `_build_agent_type_lookup`, `_last_skill_call`
+
+### Refactored
+- Extracted `_status_display` helper; eliminated duplicated markup logic in `AgentPane`
+
 ## [0.2.1] - 2026-05-03
 
 ### Added
