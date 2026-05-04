@@ -23,7 +23,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .venv
-          key: venv-lint-${{ hashFiles('poetry.lock') }}
+          key: venv-lint-${{ hashFiles('poetry.lock', 'pyproject.toml') }}
       - name: Install dependencies
         run: poetry install --with dev
       - name: Ruff lint
@@ -52,7 +52,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .venv
-          key: venv-${{ matrix.python-version }}-${{ hashFiles('poetry.lock') }}
+          key: venv-${{ matrix.python-version }}-${{ hashFiles('poetry.lock', 'pyproject.toml') }}
       - name: Install dependencies
         run: poetry install --with dev
       - name: Run tests

@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-05-04
+
+### Fixed
+- CI venv cache key now includes `pyproject.toml` so adding/changing dev dependencies (e.g. `pyright`) reliably invalidates the cache
+
 ## [0.3.2] - 2026-05-04
 
 ### Changed
