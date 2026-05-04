@@ -1,4 +1,4 @@
-.PHONY: lint format check test install install-pipx
+.PHONY: lint format check test install
 
 lint:
 	poetry run ruff check .
@@ -13,8 +13,5 @@ test:
 	poetry run pytest -q --tb=short --no-header --cov=cctop --cov-fail-under=70
 
 install:
-	pip install .
-
-install-pipx:
 	@which pipx >/dev/null 2>&1 || { echo "pipx not found. Install with: brew install pipx"; exit 1; }
 	pipx install .

@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-05-04
+
+### Changed
+- `make install` uses `pipx` (the standard for CLI tools); removed redundant `make install-pipx` target
+
 ## [0.3.5] - 2026-05-04
 
 ### Changed
