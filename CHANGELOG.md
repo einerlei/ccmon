@@ -18,6 +18,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-04
+
+### Added
+- Positional `DIR` argument: `cctop .` or `cctop /path/to/project` filters to that directory
+- `-p` short alias for `--project`
+- Bare `cctop` (no arguments) defaults to the current working directory
+
+### Changed
+- `--all` and `--project`/`-p`/positional DIR are now explicitly mutually exclusive with a clear error message
+
 ## [0.3.6] - 2026-05-04
 
 ### Changed

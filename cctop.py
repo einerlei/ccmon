@@ -18,7 +18,7 @@ from textual.containers import Grid, ScrollableContainer
 from textual.widget import Widget
 from textual.widgets import Footer, Header, Static
 
-__version__ = "0.3.6"
+__version__ = "0.4.0"
 
 logger = logging.getLogger(__name__)
 
@@ -562,12 +562,18 @@ def main() -> None:
         description="Terminal dashboard for monitoring Claude Code subagents.",
     )
     parser.add_argument(
+        "directory",
+        nargs="?",
+        metavar="DIR",
+        default=None,
+        help="Project directory to monitor (default: current working directory).",
+    )
+    parser.add_argument(
+        "-p",
         "--project",
         metavar="DIR",
         default=None,
-        help=(
-            "Show only agents for the given project directory (default: current working directory)."
-        ),
+        help="Project directory to monitor (default: current working directory).",
     )
     parser.add_argument(
         "--all",
@@ -576,16 +582,21 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if args.all and args.project is not None:
-        parser.error("--all and --project are mutually exclusive")
+    if args.directory is not None and args.project is not None:
+        parser.error("positional DIR and --project/-p are mutually exclusive")
+
+    raw_dir = args.directory or args.project
+
+    if args.all and raw_dir is not None:
+        parser.error("--all and a project directory are mutually exclusive")
 
     project_filter: Path | None = None
     if args.all:
         project_filter = None
-    elif args.project is not None:
-        project_filter = Path(args.project).resolve()
+    elif raw_dir is not None:
+        project_filter = Path(raw_dir).resolve()
         if not project_filter.is_dir():
-            parser.error(f"--project: directory does not exist: {project_filter}")
+            parser.error(f"directory does not exist: {project_filter}")
     else:
         project_filter = Path.cwd()
 
