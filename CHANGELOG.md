@@ -18,6 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-05-04
+
+### Fixed
+- Ensured `pyright` is resolvable via `poetry run pyright` in CI by confirming it is
+  declared in the `[tool.poetry.group.dev.dependencies]` section; recreating the
+  virtual environment resolves stale-venv cache misses that caused "Command not found"
+
 ## [0.3.0] - 2026-05-04
 
 ### Changed
