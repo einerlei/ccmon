@@ -596,8 +596,10 @@ class TestLoadAllAgents:
         cwd = str(tmp_path / "myproject")
         self._write_session(sessions_dir, "sess-dead", cwd, pid=999999)
 
-        with patch.object(cctop, "SESSIONS_DIR", sessions_dir), \
-             patch.object(cctop, "PROJECTS_DIR", projects_dir):
+        with (
+            patch.object(cctop, "SESSIONS_DIR", sessions_dir),
+            patch.object(cctop, "PROJECTS_DIR", projects_dir),
+        ):
             agents = load_all_agents()
 
         assert agents == []
@@ -621,8 +623,10 @@ class TestLoadAllAgents:
         jsonl_path = project_dir / f"{session_id}.jsonl"
         jsonl_path.write_text(json.dumps(msg) + "\n")
 
-        with patch.object(cctop, "SESSIONS_DIR", sessions_dir), \
-             patch.object(cctop, "PROJECTS_DIR", projects_dir):
+        with (
+            patch.object(cctop, "SESSIONS_DIR", sessions_dir),
+            patch.object(cctop, "PROJECTS_DIR", projects_dir),
+        ):
             agents = load_all_agents()
 
         # The main thread agent should appear because mtime is very recent (just written)
