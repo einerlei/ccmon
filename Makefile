@@ -1,4 +1,4 @@
-.PHONY: lint format check test install
+.PHONY: lint format check test install release
 
 lint:
 	poetry run ruff check .
@@ -15,3 +15,8 @@ test:
 install:
 	@which pipx >/dev/null 2>&1 || { echo "pipx not found. Install with: brew install pipx"; exit 1; }
 	pipx install .
+
+release:
+	@test -n "$(VERSION)" || (echo "Usage: make release VERSION=x.y.z"; exit 1)
+	git tag v$(VERSION)
+	git push && git push --tags

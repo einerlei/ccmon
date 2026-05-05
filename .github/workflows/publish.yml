@@ -1,0 +1,122 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish-pypi:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-in-project: true
+
+      - name: Cache venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-publish-${{ hashFiles('poetry.lock', 'pyproject.toml') }}
+
+      - name: Install dependencies
+        run: poetry install --without dev
+
+      - name: Build
+        run: poetry build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+  update-homebrew:
+    name: Update Homebrew formula
+    runs-on: ubuntu-latest
+    needs: publish-pypi
+    steps:
+      - name: Fetch tarball SHA256 from PyPI
+        id: pypi
+        run: |
+          VERSION="${{ github.ref_name }}"
+          # Strip leading 'v' from tag to get bare version number
+          PKG_VERSION="${VERSION#v}"
+          PYPI_JSON=$(curl -s "https://pypi.org/pypi/cctop/${PKG_VERSION}/json")
+          SHA256=$(echo "$PYPI_JSON" | jq -r '
+            .urls[]
+            | select(.packagetype == "sdist" and (.filename | endswith(".tar.gz")))
+            | .digests.sha256
+          ')
+          if [ -z "$SHA256" ] || [ "$SHA256" = "null" ]; then
+            echo "ERROR: Could not find sha256 for cctop ${PKG_VERSION} on PyPI"
+            exit 1
+          fi
+          echo "version=${PKG_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "sha256=${SHA256}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout homebrew-tap
+        uses: actions/checkout@v4
+        with:
+          repository: einerlei/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update Formula/cctop.rb
+        run: |
+          FORMULA="homebrew-tap/Formula/cctop.rb"
+          VERSION="${{ steps.pypi.outputs.version }}"
+          SHA256="${{ steps.pypi.outputs.sha256 }}"
+
+          # Update url line (replace version in the PyPI tarball URL)
+          python3 - <<'PYEOF'
+          import re, os, sys
+
+          formula_path = os.environ.get("FORMULA", "homebrew-tap/Formula/cctop.rb")
+          version      = os.environ.get("VERSION")
+          sha256       = os.environ.get("SHA256")
+
+          with open(formula_path) as f:
+              content = f.read()
+
+          # Replace url line
+          content = re.sub(
+              r'(url\s+"https://files\.pythonhosted\.org/packages/source/c/cctop/cctop-)[^"]+(")',
+              rf'\g<1>{version}.tar.gz\g<2>',
+              content,
+          )
+
+          # Replace sha256 line (first occurrence — the top-level package sha256)
+          content = re.sub(
+              r'(sha256\s+")[a-f0-9]+"',
+              rf'\g<1>{sha256}"',
+              content,
+              count=1,
+          )
+
+          with open(formula_path, "w") as f:
+              f.write(content)
+
+          print(f"Updated {formula_path} to version {version} sha256 {sha256[:16]}…")
+          PYEOF
+        env:
+          FORMULA: homebrew-tap/Formula/cctop.rb
+          VERSION: ${{ steps.pypi.outputs.version }}
+          SHA256: ${{ steps.pypi.outputs.sha256 }}
+
+      - name: Commit and push
+        run: |
+          cd homebrew-tap
+          git config user.name "einerlei"
+          git config user.email "31n34731@gmail.com"
+          git add Formula/cctop.rb
+          git commit -m "chore: bump cctop to ${{ steps.pypi.outputs.version }}"
+          git push

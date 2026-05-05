@@ -18,22 +18,22 @@ Terminal monitor for Claude Code sessions and subagents in real time. Run `cctop
 
 ## Install
 
-### Global install (recommended)
-
-Requires [pipx](https://pipx.pypa.io) (`brew install pipx` on macOS):
+### Homebrew (macOS, recommended)
 
 ```bash
-pipx install .
-# or
-make install
+brew install einerlei/tap/cctop
 ```
 
-After install, `cctop` is available globally:
+### pipx (cross-platform)
 
 ```bash
-cctop
-cctop --project /path/to/project
-cctop --all
+pipx install cctop
+```
+
+### pip
+
+```bash
+pip install cctop
 ```
 
 ### Development setup

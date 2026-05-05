@@ -7,10 +7,15 @@ authors = [
 ]
 readme = "README.md"
 requires-python = ">=3.11"
+license = {text = "MIT"}
 dependencies = [
     "textual (>=8.2.5,<9.0.0) ; python_version >= \"3.11\" and python_version < \"4.0\""
 ]
 
+[project.urls]
+Homepage = "https://github.com/einerlei/cctop"
+Repository = "https://github.com/einerlei/cctop"
+Changelog = "https://github.com/einerlei/cctop/blob/main/CHANGELOG.md"
 
 [project.scripts]
 cctop = "cctop:main"
