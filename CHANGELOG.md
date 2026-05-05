@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Releasing a new version
 
 1. Update `version` in `pyproject.toml`
-2. Update `__version__` in `cctop.py`
+2. Update `__version__` in `ccmon.py`
 3. Add release notes under a new `## [X.Y.Z] - YYYY-MM-DD` section below
 4. Commit: `git commit -m "chore: release vX.Y.Z"`
 5. Tag: `git tag vX.Y.Z`
@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 
 ## [Unreleased]
+
+## [0.5.0] - 2026-05-05
+
+### Changed
+- Renamed package and command from `cctop` to `ccmon`
 
 ## [0.4.0] - 2026-05-04
 

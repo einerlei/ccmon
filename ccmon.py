@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cctop — monitor running Claude Code sessions and subagents."""
+"""ccmon — monitor running Claude Code sessions and subagents."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from textual.containers import Grid, ScrollableContainer
 from textual.widget import Widget
 from textual.widgets import Footer, Header, Static
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 logger = logging.getLogger(__name__)
 
@@ -558,7 +558,7 @@ class Dashboard(App):
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        prog="cctop",
+        prog="ccmon",
         description="Terminal dashboard for monitoring Claude Code subagents.",
     )
     parser.add_argument(

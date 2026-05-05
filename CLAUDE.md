@@ -9,7 +9,7 @@ bump. Use semantic versioning:
 - New feature or behaviour change → minor bump (0.x.0)
 - Bug fix or internal refactor only → patch bump (0.x.x)
 
-Update both `pyproject.toml` (`version =`) and `cctop.py` (`__version__ =`), and add a
+Update both `pyproject.toml` (`version =`) and `ccmon.py` (`__version__ =`), and add a
 `## [X.Y.Z] - YYYY-MM-DD` entry to `CHANGELOG.md` following the Keep a Changelog format.
 
 ## Smoke-test after changes
@@ -17,7 +17,7 @@ Update both `pyproject.toml` (`version =`) and `cctop.py` (`__version__ =`), and
 After any code change, verify the app starts:
 
 ```bash
-poetry run cctop --help
+poetry run ccmon --help
 ```
 
 Unit tests passing is not sufficient — always run the CLI entrypoint too.

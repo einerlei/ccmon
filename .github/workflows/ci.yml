@@ -56,4 +56,4 @@ jobs:
       - name: Install dependencies
         run: poetry install --with dev
       - name: Run tests
-        run: poetry run pytest -q --tb=short --no-header --cov=cctop --cov-fail-under=70
+        run: poetry run pytest -q --tb=short --no-header --cov=ccmon --cov-fail-under=70

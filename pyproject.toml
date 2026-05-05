@@ -1,6 +1,6 @@
 [project]
-name = "cctop"
-version = "0.4.0"
+name = "ccmon"
+version = "0.5.0"
 description = "Terminal monitor for Claude Code sessions and subagents"
 authors = [
     {name = "einerlei", email = "31n34731@gmail.com"}
@@ -13,15 +13,15 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/einerlei/cctop"
-Repository = "https://github.com/einerlei/cctop"
-Changelog = "https://github.com/einerlei/cctop/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/einerlei/ccmon"
+Repository = "https://github.com/einerlei/ccmon"
+Changelog = "https://github.com/einerlei/ccmon/blob/main/CHANGELOG.md"
 
 [project.scripts]
-cctop = "cctop:main"
+ccmon = "ccmon:main"
 
 [tool.poetry]
-packages = [{include = "cctop.py"}]
+packages = [{include = "ccmon.py"}]
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

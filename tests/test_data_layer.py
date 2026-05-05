@@ -1,5 +1,5 @@
 # ruff: noqa: S101
-"""Unit tests for the data layer in cctop.py."""
+"""Unit tests for the data layer in ccmon.py."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ import os
 import time
 from unittest.mock import patch
 
-import cctop
-from cctop import (
+import ccmon
+from ccmon import (
     OUTPUT_LINES,
     AgentData,
     SessionInfo,
@@ -87,14 +87,14 @@ class TestLoadSessions:
     def test_returns_empty_list_when_sessions_dir_missing(self, tmp_path):
         fake_sessions_dir = tmp_path / "nonexistent_sessions"
         # fake_sessions_dir intentionally NOT created
-        with patch.object(cctop, "SESSIONS_DIR", fake_sessions_dir):
+        with patch.object(ccmon, "SESSIONS_DIR", fake_sessions_dir):
             result = _load_sessions()
         assert result == []
 
     def test_returns_empty_list_when_dir_exists_but_empty(self, tmp_path):
         sessions_dir = tmp_path / "sessions"
         sessions_dir.mkdir()
-        with patch.object(cctop, "SESSIONS_DIR", sessions_dir):
+        with patch.object(ccmon, "SESSIONS_DIR", sessions_dir):
             result = _load_sessions()
         assert result == []
 
@@ -109,7 +109,7 @@ class TestLoadSessions:
             "cwd": str(project_dir),
         }
         (sessions_dir / "test-session-id.json").write_text(json.dumps(session_data))
-        with patch.object(cctop, "SESSIONS_DIR", sessions_dir):
+        with patch.object(ccmon, "SESSIONS_DIR", sessions_dir):
             result = _load_sessions()
         assert len(result) == 1
         assert result[0].session_id == "test-session-id"
@@ -119,7 +119,7 @@ class TestLoadSessions:
         sessions_dir = tmp_path / "sessions"
         sessions_dir.mkdir()
         (sessions_dir / "bad.json").write_text("not valid json{{{")
-        with patch.object(cctop, "SESSIONS_DIR", sessions_dir):
+        with patch.object(ccmon, "SESSIONS_DIR", sessions_dir):
             result = _load_sessions()
         assert result == []
 
@@ -131,7 +131,7 @@ class TestLoadSessions:
         (sessions_dir / "a.json").write_text(json.dumps({"pid": 1, "cwd": fake_cwd}))
         # missing pid
         (sessions_dir / "b.json").write_text(json.dumps({"sessionId": "x", "cwd": fake_cwd}))
-        with patch.object(cctop, "SESSIONS_DIR", sessions_dir):
+        with patch.object(ccmon, "SESSIONS_DIR", sessions_dir):
             result = _load_sessions()
         assert result == []
 
@@ -148,7 +148,7 @@ class TestLoadSessions:
         (sessions_dir / "sess-a.json").write_text(json.dumps(session_data))
         different_project = tmp_path / "project_b"
         different_project.mkdir()
-        with patch.object(cctop, "SESSIONS_DIR", sessions_dir):
+        with patch.object(ccmon, "SESSIONS_DIR", sessions_dir):
             result = _load_sessions(project_filter=different_project)
         assert result == []
 
@@ -163,7 +163,7 @@ class TestLoadSessions:
             "cwd": str(project_a),
         }
         (sessions_dir / "sess-a.json").write_text(json.dumps(session_data))
-        with patch.object(cctop, "SESSIONS_DIR", sessions_dir):
+        with patch.object(ccmon, "SESSIONS_DIR", sessions_dir):
             result = _load_sessions(project_filter=project_a.resolve())
         assert len(result) == 1
         assert result[0].session_id == "sess-a"
@@ -246,19 +246,19 @@ class TestSessionInfo:
 
 class TestLoadMainThread:
     def test_returns_none_when_jsonl_missing(self, tmp_path):
-        from cctop import _load_main_thread
+        from ccmon import _load_main_thread
 
         projects_dir = tmp_path / "projects"
         projects_dir.mkdir()
         session = SessionInfo(
             pid=os.getpid(), session_id="sess-abc", cwd=str(tmp_path / "myproject"), is_alive=True
         )
-        with patch.object(cctop, "PROJECTS_DIR", projects_dir):
+        with patch.object(ccmon, "PROJECTS_DIR", projects_dir):
             result = _load_main_thread(session)
         assert result is None
 
     def test_returns_agent_data_when_jsonl_exists(self, tmp_path):
-        from cctop import _load_main_thread
+        from ccmon import _load_main_thread
 
         projects_dir = tmp_path / "projects"
         projects_dir.mkdir()
@@ -269,14 +269,14 @@ class TestLoadMainThread:
         msg = {"type": "assistant", "message": {"content": [{"type": "text", "text": "hello"}]}}
         (project_dir / f"{session_id}.jsonl").write_text(json.dumps(msg) + "\n")
         session = SessionInfo(pid=os.getpid(), session_id=session_id, cwd=cwd, is_alive=True)
-        with patch.object(cctop, "PROJECTS_DIR", projects_dir):
+        with patch.object(ccmon, "PROJECTS_DIR", projects_dir):
             result = _load_main_thread(session)
         assert result is not None
         assert result.agent_id == "__main__"
         assert result.agent_type == "main"
 
     def test_description_uses_cwd_basename(self, tmp_path):
-        from cctop import _load_main_thread
+        from ccmon import _load_main_thread
 
         projects_dir = tmp_path / "projects"
         projects_dir.mkdir()
@@ -286,7 +286,7 @@ class TestLoadMainThread:
         session_id = "sess-desc"
         (project_dir / f"{session_id}.jsonl").write_text("{}\n")
         session = SessionInfo(pid=os.getpid(), session_id=session_id, cwd=cwd, is_alive=True)
-        with patch.object(cctop, "PROJECTS_DIR", projects_dir):
+        with patch.object(ccmon, "PROJECTS_DIR", projects_dir):
             result = _load_main_thread(session)
         assert result is not None
         assert "my-cool-project" in result.description
@@ -363,7 +363,7 @@ class TestBuildAgentTypeLookup:
     def test_missing_jsonl_returns_empty_dict(self, tmp_path):
         projects_dir = tmp_path / "projects"
         projects_dir.mkdir()
-        with patch.object(cctop, "PROJECTS_DIR", projects_dir):
+        with patch.object(ccmon, "PROJECTS_DIR", projects_dir):
             result = _build_agent_type_lookup("sess-x", "-home-user-proj")
         assert result == {}
 
@@ -374,7 +374,7 @@ class TestBuildAgentTypeLookup:
         (project_dir / "sess-x.jsonl").write_text(
             self._agent_line("my task", "general-purpose") + "\n"
         )
-        with patch.object(cctop, "PROJECTS_DIR", projects_dir):
+        with patch.object(ccmon, "PROJECTS_DIR", projects_dir):
             result = _build_agent_type_lookup("sess-x", "-home-user-proj")
         assert result == {"my task": "general-purpose"}
 
@@ -383,7 +383,7 @@ class TestBuildAgentTypeLookup:
         project_dir = projects_dir / "-home-user-proj"
         project_dir.mkdir(parents=True)
         (project_dir / "sess-x.jsonl").write_text("not valid json{{{\n")
-        with patch.object(cctop, "PROJECTS_DIR", projects_dir):
+        with patch.object(ccmon, "PROJECTS_DIR", projects_dir):
             result = _build_agent_type_lookup("sess-x", "-home-user-proj")
         assert result == {}
 
@@ -401,7 +401,7 @@ class TestBuildAgentTypeLookup:
             + "\n"
         )
         (project_dir / "sess-x.jsonl").write_text(lines)
-        with patch.object(cctop, "PROJECTS_DIR", projects_dir):
+        with patch.object(ccmon, "PROJECTS_DIR", projects_dir):
             result = _build_agent_type_lookup("sess-x", "-home-user-proj")
         assert result == {"task one": "general-purpose", "task two": "code-reviewer"}
 
@@ -443,7 +443,7 @@ class TestLastSkillCall:
 
 class TestLoadMessages:
     def test_invalid_jsonl_returns_empty_list(self, tmp_path):
-        from cctop import _load_messages
+        from ccmon import _load_messages
 
         bad_file = tmp_path / "bad.jsonl"
         bad_file.write_text("not json{")
@@ -451,7 +451,7 @@ class TestLoadMessages:
         assert result == []
 
     def test_valid_jsonl_returns_parsed_lines(self, tmp_path):
-        from cctop import _load_messages
+        from ccmon import _load_messages
 
         good_file = tmp_path / "good.jsonl"
         msg = {"type": "assistant", "message": {"content": []}}
@@ -460,7 +460,7 @@ class TestLoadMessages:
         assert result == [msg]
 
     def test_blank_lines_are_skipped(self, tmp_path):
-        from cctop import _load_messages
+        from ccmon import _load_messages
 
         f = tmp_path / "msgs.jsonl"
         msg = {"type": "user"}
@@ -480,7 +480,7 @@ class TestBuildAgentTypeLookupEdgeCases:
         project_dir.mkdir(parents=True)
         entry = {"type": "assistant", "message": {"content": "plain string"}}
         (project_dir / "sess-x.jsonl").write_text(json.dumps(entry) + "\n")
-        with patch.object(cctop, "PROJECTS_DIR", projects_dir):
+        with patch.object(ccmon, "PROJECTS_DIR", projects_dir):
             result = _build_agent_type_lookup("sess-x", "-home-user-proj")
         assert result == {}
 
@@ -511,7 +511,7 @@ class TestLoadAgentsForSession:
 
     def test_missing_jsonl_loads_agent_with_empty_messages(self, tmp_path):
         """An agent with a .meta.json but no .jsonl still loads with empty messages."""
-        from cctop import _load_agents_for_session
+        from ccmon import _load_agents_for_session
 
         cwd = str(tmp_path / "myproject")
         session = self._make_session(cwd)
@@ -520,7 +520,7 @@ class TestLoadAgentsForSession:
         subagents_dir.mkdir(parents=True)
         self._write_meta(subagents_dir, "001", description="my task")
 
-        with patch.object(cctop, "PROJECTS_DIR", tmp_path / "projects"):
+        with patch.object(ccmon, "PROJECTS_DIR", tmp_path / "projects"):
             agents = _load_agents_for_session(session)
 
         assert len(agents) == 1
@@ -529,7 +529,7 @@ class TestLoadAgentsForSession:
 
     def test_manager_agent_with_skill_call_shows_skill_name(self, tmp_path):
         """Agent with agent_type 'manager' and a Skill tool call shows 'manager → <skill>'."""
-        from cctop import _load_agents_for_session
+        from ccmon import _load_agents_for_session
 
         cwd = str(tmp_path / "myproject")
         session = self._make_session(cwd)
@@ -554,7 +554,7 @@ class TestLoadAgentsForSession:
         }
         (subagents_dir / f"agent-{agent_id}.jsonl").write_text(json.dumps(skill_msg) + "\n")
 
-        with patch.object(cctop, "PROJECTS_DIR", projects_dir):
+        with patch.object(ccmon, "PROJECTS_DIR", projects_dir):
             agents = _load_agents_for_session(session)
 
         assert len(agents) == 1
@@ -562,7 +562,7 @@ class TestLoadAgentsForSession:
 
     def test_bad_meta_json_is_skipped(self, tmp_path):
         """A .meta.json with invalid JSON is caught and that agent is not returned."""
-        from cctop import _load_agents_for_session
+        from ccmon import _load_agents_for_session
 
         cwd = str(tmp_path / "myproject")
         session = self._make_session(cwd)
@@ -571,7 +571,7 @@ class TestLoadAgentsForSession:
         subagents_dir.mkdir(parents=True)
         (subagents_dir / "agent-bad.meta.json").write_text("INVALID JSON{")
 
-        with patch.object(cctop, "PROJECTS_DIR", tmp_path / "projects"):
+        with patch.object(ccmon, "PROJECTS_DIR", tmp_path / "projects"):
             agents = _load_agents_for_session(session)
 
         assert agents == []
@@ -587,7 +587,7 @@ class TestLoadAllAgents:
 
     def test_dead_session_is_skipped(self, tmp_path):
         """A session whose pid is not alive is excluded entirely by load_all_agents."""
-        from cctop import load_all_agents
+        from ccmon import load_all_agents
 
         sessions_dir = tmp_path / "sessions"
         sessions_dir.mkdir()
@@ -597,8 +597,8 @@ class TestLoadAllAgents:
         self._write_session(sessions_dir, "sess-dead", cwd, pid=999999)
 
         with (
-            patch.object(cctop, "SESSIONS_DIR", sessions_dir),
-            patch.object(cctop, "PROJECTS_DIR", projects_dir),
+            patch.object(ccmon, "SESSIONS_DIR", sessions_dir),
+            patch.object(ccmon, "PROJECTS_DIR", projects_dir),
         ):
             agents = load_all_agents()
 
@@ -606,7 +606,7 @@ class TestLoadAllAgents:
 
     def test_stale_non_running_agent_with_recent_mtime_is_included(self, tmp_path):
         """Non-running agent with recent mtime is included (within EXPIRE_SECONDS)."""
-        from cctop import load_all_agents
+        from ccmon import load_all_agents
 
         sessions_dir = tmp_path / "sessions"
         sessions_dir.mkdir()
@@ -624,8 +624,8 @@ class TestLoadAllAgents:
         jsonl_path.write_text(json.dumps(msg) + "\n")
 
         with (
-            patch.object(cctop, "SESSIONS_DIR", sessions_dir),
-            patch.object(cctop, "PROJECTS_DIR", projects_dir),
+            patch.object(ccmon, "SESSIONS_DIR", sessions_dir),
+            patch.object(ccmon, "PROJECTS_DIR", projects_dir),
         ):
             agents = load_all_agents()
 
