@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-05-10
+
+### Added
+- Token usage display: each agent pane shows its cumulative output-token count; the status bar shows the session-wide total
+
 ## [0.5.2] - 2026-05-10
 
 ### Added

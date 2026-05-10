@@ -18,7 +18,7 @@ from textual.containers import Grid, ScrollableContainer
 from textual.widget import Widget
 from textual.widgets import Footer, Header, Static
 
-__version__ = "0.5.2"
+__version__ = "0.5.3"
 
 logger = logging.getLogger(__name__)
 
@@ -294,6 +294,37 @@ def load_all_agents(project_filter: Path | None = None) -> list[AgentData]:
     return filtered
 
 
+# ─── Token accounting ─────────────────────────────────────────────────────────
+
+
+def _token_counts(messages: list[dict]) -> tuple[int, int]:
+    """Return (output_tokens, total_tokens) summed across all assistant messages."""
+    out = 0
+    total = 0
+    for msg in messages:
+        if msg.get("type") != "assistant":
+            continue
+        usage = msg.get("message", {}).get("usage", {})
+        o = usage.get("output_tokens", 0)
+        t = (
+            usage.get("input_tokens", 0)
+            + usage.get("cache_read_input_tokens", 0)
+            + usage.get("cache_creation_input_tokens", 0)
+            + o
+        )
+        out += o
+        total += t
+    return out, total
+
+
+def _fmt_tokens(n: int) -> str:
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    if n >= 1_000:
+        return f"{n / 1_000:.1f}k"
+    return str(n)
+
+
 # ─── Output rendering ─────────────────────────────────────────────────────────
 
 
@@ -373,13 +404,15 @@ class AgentPane(Widget):
         if data.agent_type == "main":
             self.add_class("pane--main")
 
+    def _meta_markup(self, data: AgentData) -> str:
+        out, _ = _token_counts(data.messages)
+        tok = f"  ·  [dim]{_fmt_tokens(out)} out[/]" if out else ""
+        project = Path(data.session.cwd).name
+        return f"   [dim]{escape(data.agent_type[:40])}[/]  ·  [dim]{project}[/]{tok}"
+
     def compose(self) -> ComposeResult:
         yield Static(_status_display(self.data), classes="pane-title")
-        project = Path(self.data.session.cwd).name
-        yield Static(
-            f"   [dim]{escape(self.data.agent_type[:40])}[/]  ·  [dim]{project}[/]",
-            classes="pane-meta",
-        )
+        yield Static(self._meta_markup(self.data), classes="pane-meta")
         yield Static("   " + "─" * 60, classes="pane-divider")
         yield Static(self._output_markup(), classes="pane-output")
 
@@ -402,10 +435,7 @@ class AgentPane(Widget):
         else:
             self.remove_class("pane--main")
         self.query_one(".pane-title", Static).update(_status_display(data))
-        project = Path(data.session.cwd).name
-        self.query_one(".pane-meta", Static).update(
-            f"   [dim]{escape(data.agent_type[:40])}[/]  ·  [dim]{project}[/]"
-        )
+        self.query_one(".pane-meta", Static).update(self._meta_markup(data))
         self.query_one(".pane-output", Static).update(self._output_markup())
 
 
@@ -547,9 +577,11 @@ class Dashboard(App):
         n_running = sum(1 for a in agents if a.status == "running")
         n_total = len(agents)
         ts = time.strftime("%H:%M:%S")
+        total_out = sum(_token_counts(a.messages)[0] for a in agents)
+        tok_part = f"  ·  [dim]{_fmt_tokens(total_out)} tokens out[/dim]" if total_out else ""
         self.query_one("#status-bar", Static).update(
             f"[green]{n_running} running[/green]  ·  [dim]{n_total} total[/dim]  ·  "
-            f"auto-refresh {REFRESH_INTERVAL:g}s  ·  [dim]{ts}[/dim]{self._filter_label}"
+            f"auto-refresh {REFRESH_INTERVAL:g}s  ·  [dim]{ts}[/dim]{tok_part}{self._filter_label}"
         )
 
     def action_refresh(self) -> None:
