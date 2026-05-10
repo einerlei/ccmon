@@ -14,7 +14,6 @@ Terminal monitor for Claude Code sessions and subagents in real time. Run `ccmon
 ## Requirements
 
 - Python 3.11+
-- Poetry
 
 ## Install
 
@@ -41,8 +40,8 @@ pip install ccmon
 ```bash
 git clone https://github.com/einerlei/ccmon.git
 cd ccmon
-poetry install
-poetry run ccmon
+uv sync
+uv run ccmon
 ```
 
 ## Usage
@@ -80,14 +79,14 @@ The monitor is a single-file Python application using the Textual TUI framework.
 
 ```bash
 # Install with dev dependencies
-poetry install
+uv sync
 
 # Run tests
-poetry run pytest -q
+uv run pytest -q
 
 # Lint and format
-poetry run ruff check
-poetry run ruff format --check
+uv run ruff check
+uv run ruff format --check
 
 # Run the monitor
 ccmon
