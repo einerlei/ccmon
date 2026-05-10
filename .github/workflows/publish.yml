@@ -104,5 +104,5 @@ jobs:
           git config user.name "einerlei"
           git config user.email "31n34731@gmail.com"
           git add Formula/ccmon.rb
-          git commit -m "chore: bump ccmon to ${{ steps.pypi.outputs.version }}"
+          git diff --staged --quiet && echo "Formula already up to date" || git commit -m "chore: bump ccmon to ${{ steps.pypi.outputs.version }}"
           git push
