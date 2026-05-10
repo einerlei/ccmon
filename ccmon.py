@@ -18,7 +18,7 @@ from textual.containers import Grid, ScrollableContainer
 from textual.widget import Widget
 from textual.widgets import Footer, Header, Static
 
-__version__ = "0.5.3"
+__version__ = "0.5.4"
 
 logger = logging.getLogger(__name__)
 

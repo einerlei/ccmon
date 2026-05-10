@@ -1,6 +1,6 @@
 [project]
 name = "ccmon"
-version = "0.5.3"
+version = "0.5.4"
 description = "Terminal monitor for Claude Code sessions and subagents"
 authors = [
     {name = "einerlei", email = "31n34731@gmail.com"}
@@ -9,7 +9,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 dependencies = [
-    "textual (>=8.2.5,<9.0.0) ; python_version >= \"3.11\" and python_version < \"4.0\""
+    "textual>=8.2.5,<9.0.0"
 ]
 
 [project.urls]
@@ -20,19 +20,21 @@ Changelog = "https://github.com/einerlei/ccmon/blob/main/CHANGELOG.md"
 [project.scripts]
 ccmon = "ccmon:main"
 
-[tool.poetry]
-packages = [{include = "ccmon.py"}]
-
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.0"
-pytest-asyncio = "^0.24"
-pytest-cov = "^6.0"
-pyright = "^1.1"
-ruff = "^0.9"
+[tool.hatch.build.targets.wheel]
+include = ["ccmon.py"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "pyright>=1.1",
+    "ruff>=0.9",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

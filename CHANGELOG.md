@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-05-10
+
+### Changed
+- Migrated build tooling from Poetry to uv (hatchling build backend, PEP 735 dependency groups)
+
 ## [0.5.3] - 2026-05-10
 
 ### Added
