@@ -1,6 +1,6 @@
 [project]
 name = "ccmon"
-version = "0.5.4"
+version = "0.5.5"
 description = "Terminal monitor for Claude Code sessions and subagents"
 authors = [
     {name = "einerlei", email = "31n34731@gmail.com"}
