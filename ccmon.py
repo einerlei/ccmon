@@ -18,7 +18,7 @@ from textual.containers import Grid, ScrollableContainer
 from textual.widget import Widget
 from textual.widgets import Footer, Header, Static
 
-__version__ = "0.5.0"
+__version__ = "0.5.2"
 
 logger = logging.getLogger(__name__)
 
@@ -283,7 +283,7 @@ def load_all_agents(project_filter: Path | None = None) -> list[AgentData]:
     cutoff = time.time() - EXPIRE_SECONDS
     filtered: list[AgentData] = []
     for agent in agents:
-        if agent.status == "running":
+        if agent.status == "running" or agent.session.is_alive:
             filtered.append(agent)
             continue
         last_activity = agent.jsonl_mtime or agent.started_at
@@ -576,6 +576,7 @@ def main() -> None:
         help="Project directory to monitor (default: current working directory).",
     )
     parser.add_argument(
+        "-a",
         "--all",
         action="store_true",
         help="Show agents from all projects instead of filtering by directory.",

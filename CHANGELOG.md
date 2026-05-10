@@ -18,6 +18,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-05-10
+
+### Added
+- `-a` as a short alias for `--all`
+
+## [0.5.1] - 2026-05-10
+
+### Fixed
+- `--all` now shows sessions that are idle (waiting for user input); previously they disappeared after 5 seconds because Claude's last response was mistaken for a completed/expired agent
+
 ## [0.5.0] - 2026-05-05
 
 ### Changed
