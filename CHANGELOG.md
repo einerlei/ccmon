@@ -18,6 +18,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.7] - 2026-05-20
+
+### Fixed
+- Crash on launch (`WidgetError: ... out of bounds`) when agent sessions
+  were already present. The grid reorder loop now skips panes whose mount
+  has not yet been processed by Textual and tolerates transient
+  out-of-bounds indices.
+
 ## [0.5.6] - 2026-05-10
 
 ### Fixed

@@ -15,10 +15,10 @@ from rich.markup import escape
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Grid, ScrollableContainer
-from textual.widget import Widget
+from textual.widget import Widget, WidgetError
 from textual.widgets import Footer, Header, Static
 
-__version__ = "0.5.6"
+__version__ = "0.5.7"
 
 logger = logging.getLogger(__name__)
 
@@ -571,8 +571,18 @@ class Dashboard(App):
                     grid.mount(pane)
 
             # Re-order children so they match the sorted agent list (newest first).
+            # Skip panes still being mounted: Textual defers mount processing, so a
+            # freshly mounted pane may not appear in grid.children until the next
+            # refresh tick. Any remaining out-of-bounds index is swallowed and
+            # corrected on the following refresh.
             for idx, a in enumerate(agents):
-                grid.move_child(self._pane_map[a.key], before=idx)
+                pane = self._pane_map[a.key]
+                if pane not in grid.children:
+                    continue
+                try:
+                    grid.move_child(pane, before=idx)
+                except WidgetError:
+                    pass
 
         n_running = sum(1 for a in agents if a.status == "running")
         n_total = len(agents)
